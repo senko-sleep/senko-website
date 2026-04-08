@@ -151,7 +151,12 @@ export default function SearchBar({
               </li>
             )}
             {combined.map((c, i) => (
-              <li key={`${c.kind}-${c.text}-${i}`} id={`opt-${i}`} role="option">
+              <li
+                key={`${c.kind}-${c.text}-${i}`}
+                id={`opt-${i}`}
+                role="option"
+                aria-selected={i === activeIdx}
+              >
                 <button
                   type="button"
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
