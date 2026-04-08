@@ -16,7 +16,7 @@ import { apiUrl } from '@/lib/api';
 import type { SearchResponse } from '@senko/shared';
 import type { SearchTab } from '@/lib/history';
 import { addHistory } from '@/lib/history';
-import { useTheme } from 'next-themes';
+import { useClientDark } from '@/lib/useClientDark';
 import { Play, MapPin, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import { hostnameFromUrl, siteTitleFromHostname } from '@/lib/site';
@@ -54,7 +54,7 @@ function highlight(text: string | null | undefined, q: string): React.ReactNode 
 export default function SearchPageContent() {
   const params = useSearchParams();
   const router = useRouter();
-  const { resolvedTheme } = useTheme();
+  const clientDark = useClientDark();
   const q = params.get('q') ?? '';
   const type = parseTab(params.get('type'));
   const page = Number(params.get('page') ?? '1') || 1;
@@ -83,12 +83,23 @@ export default function SearchPageContent() {
         )
       : null;
 
-  const fetcher = async (url: string) => {
-    const res = await axios.get<SearchResponse>(url);
-    return res.data;
+  const fetcher = async (url: string): Promise<SearchResponse> => {
+    try {
+      const res = await axios.get<SearchResponse>(url);
+      return res.data;
+    } catch {
+      return {
+        query: q,
+        type: String(apiSearchType ?? 'web'),
+        page,
+        perPage: 10,
+        totalResults: 0,
+        results: [],
+      };
+    }
   };
 
-  const { data, isLoading } = useSWR(key, fetcher);
+  const { data, isLoading } = useSWR(key, fetcher, { shouldRetryOnError: false });
 
   useEffect(() => {
     if (q) addHistory(q, type);
@@ -130,7 +141,7 @@ export default function SearchPageContent() {
       <header className="sticky top-0 z-30 border-b border-white/30 bg-white/45 shadow-sm backdrop-blur-2xl dark:border-white/[0.06] dark:bg-slate-950/50">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3.5">
           <button type="button" className="flex shrink-0 items-center gap-2" onClick={() => router.push('/')}>
-            <FoxTailLogo size={32} animated={false} glowing={resolvedTheme === 'dark'} />
+            <FoxTailLogo size={32} animated={false} glowing={clientDark} />
             <span className="font-display text-xl font-bold tracking-tight text-slate-900 dark:text-white">Senko</span>
           </button>
           <div className="min-w-0 flex-1">

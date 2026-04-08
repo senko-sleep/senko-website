@@ -1,13 +1,43 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, Clock, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { apiUrl } from '@/lib/api';
 import { loadHistory, saveHistory, type HistoryEntry, type SearchTab } from '@/lib/history';
 
 export type { SearchTab };
+
+/** Bold the typed segment in a suggestion (Bing-style match highlight). */
+function SuggestionLabel({ query, text }: { query: string; text: string }) {
+  const q = query.trim();
+  if (!q) return <span className="text-slate-800 dark:text-slate-100">{text}</span>;
+  const tl = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const bold = (chunk: string) => (
+    <span className="font-semibold text-[var(--senko-orange)] dark:text-orange-300">{chunk}</span>
+  );
+  if (tl.startsWith(ql)) {
+    return (
+      <span className="text-slate-800 dark:text-slate-100">
+        {bold(text.slice(0, q.length))}
+        {text.slice(q.length)}
+      </span>
+    );
+  }
+  const at = tl.indexOf(ql);
+  if (at >= 0) {
+    return (
+      <span className="text-slate-800 dark:text-slate-100">
+        {text.slice(0, at)}
+        {bold(text.slice(at, at + q.length))}
+        {text.slice(at + q.length)}
+      </span>
+    );
+  }
+  return <span className="text-slate-800 dark:text-slate-100">{text}</span>;
+}
 
 interface SearchBarProps {
   initialQuery?: string;
@@ -26,6 +56,7 @@ export default function SearchBar({
 }: SearchBarProps) {
   const [q, setQ] = useState(initialQuery);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -43,10 +74,18 @@ export default function SearchBar({
   const fetchSuggest = useCallback(async (partial: string) => {
     if (partial.length < 2) {
       setSuggestions([]);
+      setSuggestLoading(false);
       return;
     }
-    const res = await axios.get<string[]>(apiUrl(`/api/suggest?q=${encodeURIComponent(partial)}`));
-    setSuggestions(res.data);
+    setSuggestLoading(true);
+    try {
+      const res = await axios.get<string[]>(apiUrl(`/api/suggest?q=${encodeURIComponent(partial)}`));
+      setSuggestions(res.data);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -59,10 +98,27 @@ export default function SearchBar({
     };
   }, [q, fetchSuggest]);
 
-  const combined = [
-    ...history.filter((h) => h.query.toLowerCase().includes(q.toLowerCase())).map((h) => ({ kind: 'history' as const, text: h.query })),
-    ...suggestions.map((s) => ({ kind: 'suggest' as const, text: s })),
-  ].slice(0, 8);
+  const historyRows = useMemo(
+    () =>
+      history
+        .filter((h) => h.query.toLowerCase().includes(q.toLowerCase()))
+        .map((h) => ({ kind: 'history' as const, text: h.query, ts: h.timestamp })),
+    [history, q],
+  );
+  const suggestRows = useMemo(
+    () => suggestions.map((s) => ({ kind: 'suggest' as const, text: s })),
+    [suggestions],
+  );
+  const combined = [...historyRows, ...suggestRows].slice(0, 10);
+
+  const showDropdown =
+    open &&
+    (combined.length > 0 ||
+      (q.length >= 2 && suggestLoading && suggestRows.length === 0 && historyRows.length === 0));
+
+  useEffect(() => {
+    setActiveIdx((i) => Math.min(i, Math.max(0, combined.length - 1)));
+  }, [combined.length]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -133,48 +189,137 @@ export default function SearchBar({
         )}
       </div>
       <AnimatePresence>
-        {open && (combined.length > 0 || history.length > 0) && (
+        {showDropdown && (
           <motion.ul
             id={listId}
             role="listbox"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            className="absolute left-0 right-0 top-full z-40 mt-2 max-h-80 overflow-auto rounded-2xl border border-white/50 bg-white/80 p-2 shadow-glass backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/80 dark:shadow-glass-dark"
+            transition={{ duration: 0.18 }}
+            className="absolute left-0 right-0 top-full z-40 mt-2 max-h-[22rem] overflow-auto rounded-2xl border border-white/60 bg-white/85 p-1.5 shadow-glass backdrop-blur-2xl dark:border-white/[0.08] dark:bg-slate-900/90 dark:shadow-glass-dark"
           >
-            {history.length > 0 && (
-              <li className="flex items-center justify-between px-2 py-1 text-xs text-senko-gray">
-                <span>Recent</span>
-                <button type="button" className="text-[var(--senko-orange)]" onClick={clearHistory}>
-                  Clear
-                </button>
+            {historyRows.length > 0 && (
+              <>
+                <li className="flex items-center justify-between px-3 pb-1.5 pt-1">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <Clock className="h-3.5 w-3.5" aria-hidden />
+                    Recent
+                  </span>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-[var(--senko-orange)] hover:underline"
+                    onClick={clearHistory}
+                  >
+                    Clear
+                  </button>
+                </li>
+                {historyRows.map((c, idx) => {
+                  const i = idx;
+                  return (
+                    <li
+                      key={`history-${c.ts}`}
+                      id={`opt-${i}`}
+                      role="option"
+                      aria-selected={i === activeIdx}
+                      onMouseEnter={() => setActiveIdx(i)}
+                    >
+                      <button
+                        type="button"
+                        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-sm transition-colors ${
+                          i === activeIdx
+                            ? 'bg-gradient-to-r from-orange-500/12 to-transparent dark:from-orange-400/10'
+                            : 'hover:bg-white/60 dark:hover:bg-white/[0.04]'
+                        }`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setQ(c.text);
+                          onSubmitSearch(c.text, activeTab);
+                          setOpen(false);
+                        }}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-200/60 bg-gradient-to-br from-orange-50 to-amber-50/80 text-[var(--senko-orange)] shadow-sm dark:border-orange-500/20 dark:from-orange-950/40 dark:to-amber-950/30">
+                          <Clock className="h-4 w-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <SuggestionLabel query={q} text={c.text} />
+                        </span>
+                        <span className="shrink-0 rounded-full bg-slate-100/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400">
+                          Recent
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {suggestRows.length > 0 && (
+                  <li className="my-1.5 h-px bg-gradient-to-r from-transparent via-slate-200/80 to-transparent dark:via-white/10" />
+                )}
+              </>
+            )}
+
+            {(suggestRows.length > 0 || (q.length >= 2 && suggestLoading)) && (
+              <li className="flex items-center gap-1.5 px-3 pb-1.5 pt-1">
+                <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-sky-400" aria-hidden />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Suggestions
+                </span>
+                {suggestLoading && (
+                  <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />
+                )}
               </li>
             )}
-            {combined.map((c, i) => (
-              <li
-                key={`${c.kind}-${c.text}-${i}`}
-                id={`opt-${i}`}
-                role="option"
-                aria-selected={i === activeIdx}
-              >
-                <button
-                  type="button"
-                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-                    i === activeIdx ? 'bg-[var(--senko-cream)] dark:bg-white/5' : ''
-                  }`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setQ(c.text);
-                    onSubmitSearch(c.text, activeTab);
-                    setOpen(false);
-                  }}
+
+            {suggestRows.map((c, idx) => {
+              const i = historyRows.length + idx;
+              return (
+                <li
+                  key={`suggest-${c.text}-${idx}`}
+                  id={`opt-${i}`}
+                  role="option"
+                  aria-selected={i === activeIdx}
+                  onMouseEnter={() => setActiveIdx(i)}
                 >
-                  <Search className="h-4 w-4 opacity-60" />
-                  <span>{c.text}</span>
-                  {c.kind === 'history' && <span className="ml-auto text-xs text-senko-gray">history</span>}
-                </button>
+                  <button
+                    type="button"
+                    className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-sm transition-colors ${
+                      i === activeIdx
+                        ? 'bg-gradient-to-r from-sky-500/12 to-transparent dark:from-sky-400/10'
+                        : 'hover:bg-white/60 dark:hover:bg-white/[0.04]'
+                    }`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setQ(c.text);
+                      onSubmitSearch(c.text, activeTab);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/70 bg-gradient-to-br from-sky-50 to-blue-50/90 text-sky-600 shadow-sm dark:border-sky-500/25 dark:from-sky-950/50 dark:to-blue-950/40 dark:text-sky-300">
+                      <Sparkles className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <SuggestionLabel query={q} text={c.text} />
+                    </span>
+                    <span className="shrink-0 rounded-full bg-sky-100/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                      Index
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+
+            {q.length >= 2 && suggestLoading && suggestRows.length === 0 && historyRows.length === 0 && (
+              <li className="space-y-2 px-2 py-3">
+                {[0, 1, 2].map((k) => (
+                  <div
+                    key={k}
+                    className="flex items-center gap-3 rounded-xl px-2.5 py-2"
+                  >
+                    <span className="h-9 w-9 animate-pulse rounded-xl bg-slate-200/80 dark:bg-white/10" />
+                    <span className="h-4 flex-1 animate-pulse rounded-md bg-slate-200/70 dark:bg-white/10" />
+                  </div>
+                ))}
               </li>
-            ))}
+            )}
           </motion.ul>
         )}
       </AnimatePresence>

@@ -10,8 +10,8 @@ import type { SearchTab } from '@/lib/history';
 import useSWR from 'swr';
 import axios from 'axios';
 import { apiUrl } from '@/lib/api';
-import { useTheme } from 'next-themes';
 import { addHistory } from '@/lib/history';
+import { useClientDark } from '@/lib/useClientDark';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import SafeSearchToggle, { useSafeSearch } from '@/components/SafeSearchToggle';
 
@@ -26,17 +26,21 @@ const tabs: { id: SearchTab; label: string }[] = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { resolvedTheme } = useTheme();
+  const clientDark = useClientDark();
   const [tab, setTab] = useState<SearchTab>('all');
   const [safe, setSafe] = useSafeSearch();
 
   const { data: trending } = useSWR(
     apiUrl('/api/trending'),
     async (u) => {
-      const res = await axios.get<{ trending: { query: string; score: number }[] }>(u);
-      return res.data;
+      try {
+        const res = await axios.get<{ trending: { query: string; score: number }[] }>(u);
+        return res.data;
+      } catch {
+        return { trending: [] as { query: string; score: number }[] };
+      }
     },
-    { refreshInterval: 60_000 },
+    { refreshInterval: 60_000, shouldRetryOnError: false },
   );
 
   const onSubmit = (q: string, t: SearchTab) => {
@@ -67,7 +71,7 @@ export default function HomePage() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.05, duration: 0.45 }}
             >
-              <FoxTailLogo size={112} animated glowing={resolvedTheme === 'dark'} />
+              <FoxTailLogo size={112} animated glowing={clientDark} />
             </motion.div>
             <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-slate-900 md:text-5xl dark:text-white">
               Senko Search

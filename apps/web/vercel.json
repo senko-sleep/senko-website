@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "while [ ! -f package-lock.json ] && [ \"$(pwd)\" != / ]; do cd ..; done; npm install --no-audit --no-fund",
-  "buildCommand": "while [ ! -f package-lock.json ] && [ \"$(pwd)\" != / ]; do cd ..; done; npm run build -w @senko/shared && npm run build -w @senko/web",
+  "installCommand": "cd ../.. && npm install --no-audit --no-fund",
+  "buildCommand": "cd ../.. && npm run build -w @senko/shared && npm run build -w @senko/web",
   "framework": "nextjs"
 }

@@ -12,16 +12,32 @@ interface Props {
   safeParam: string;
 }
 
-const fetcher = (url: string) => axios.get<string[]>(url).then((r) => r.data);
+async function suggestFetcher(url: string): Promise<string[]> {
+  try {
+    const r = await axios.get<string[]>(url);
+    return r.data;
+  } catch {
+    return [];
+  }
+}
 
 export default function ImageSuggestionsPanel({ query, safeParam }: Props) {
   const router = useRouter();
   const suggestUrl =
     query.length >= 2 ? apiUrl(`/api/suggest?q=${encodeURIComponent(query)}`) : null;
-  const { data: suggestions } = useSWR(suggestUrl, fetcher);
+  const { data: suggestions } = useSWR(suggestUrl, suggestFetcher, { shouldRetryOnError: false });
   const trendUrl = apiUrl('/api/trending');
-  const { data: trending } = useSWR(trendUrl, (u) =>
-    axios.get<{ trending: { query: string; score: number }[] }>(u).then((r) => r.data),
+  const { data: trending } = useSWR(
+    trendUrl,
+    async (u) => {
+      try {
+        const r = await axios.get<{ trending: { query: string; score: number }[] }>(u);
+        return r.data;
+      } catch {
+        return { trending: [] as { query: string; score: number }[] };
+      }
+    },
+    { shouldRetryOnError: false },
   );
 
   const go = (q: string, type: SearchTab = 'image') => {
