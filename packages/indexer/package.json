@@ -1,0 +1,28 @@
+{
+  "name": "@senko/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "index": "node dist/cli.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@senko/crawler": "*",
+    "@senko/db": "*",
+    "@senko/shared": "*",
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
+    "ioredis": "^5.4.1",
+    "node-cron": "^3.0.3",
+    "probe-image-size": "^7.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: senko
+      POSTGRES_USER: senko
+      POSTGRES_PASSWORD: senko
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://senko:senko@postgres:5432/senko
+      REDIS_URL: redis://redis:6379
+      API_PORT: '4000'
+      CORS_ORIGIN: http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - '4000:4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:4000
+    depends_on:
+      - api
+    ports:
+      - '3000:3000'
+
+  crawler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.crawler
+    environment:
+      DATABASE_URL: postgresql://senko:senko@postgres:5432/senko
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    command: ['node', 'apps/api/dist/workers/crawlWorker.js']
+
+volumes:
+  postgres_data:

@@ -1,0 +1,25 @@
+{
+  "name": "@senko/crawler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "crawl": "node dist/cli.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@senko/shared": "*",
+    "axios": "^1.7.7",
+    "bull": "^4.16.3",
+    "cheerio": "^1.0.0",
+    "ioredis": "^5.4.1",
+    "robots-parser": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,28 @@
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/db/package.json ./packages/db/
+COPY packages/crawler/package.json ./packages/crawler/
+COPY packages/indexer/package.json ./packages/indexer/
+COPY apps/api/package.json ./apps/api/
+RUN npm install --workspaces --include-workspace-root
+
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
+RUN cd packages/db && npx prisma generate
+RUN npm run build -w @senko/shared -w @senko/db -w @senko/crawler -w @senko/indexer -w @senko/api
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json ./
+COPY --from=build /app/packages ./packages
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
+CMD ["node", "apps/api/dist/workers/crawlWorker.js"]

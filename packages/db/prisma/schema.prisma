@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Page {
+  id          String    @id @default(cuid())
+  url         String    @unique
+  title       String?
+  description String?
+  bodyText    String?
+  wordCount   Int       @default(0)
+  rankScore   Float     @default(0)
+  language    String?
+  crawledAt   DateTime  @default(now())
+  headings    String[]  @default([])
+  canonicalUrl String?
+  safeFlag    Boolean   @default(true)
+
+  keywords     Keyword[]
+  inboundLinks Link[]   @relation("LinkTarget")
+  outboundLinks Link[]   @relation("LinkSource")
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  pageUrl   String
+  altText   String?
+  width     Int?
+  height    Int?
+  format    String?
+  crawledAt DateTime @default(now())
+  safeFlag  Boolean  @default(true)
+}
+
+model Video {
+  id           String   @id @default(cuid())
+  url          String   @unique
+  pageUrl      String
+  title        String?
+  description  String?
+  thumbnailUrl String?
+  platform     String?
+  duration     Int?
+  crawledAt    DateTime @default(now())
+  safeFlag     Boolean  @default(true)
+}
+
+model Gif {
+  id         String   @id @default(cuid())
+  url        String   @unique
+  pageUrl    String
+  altText    String?
+  width      Int?
+  height     Int?
+  crawledAt  DateTime @default(now())
+  animated   Boolean  @default(true)
+  safeFlag   Boolean  @default(true)
+}
+
+model Keyword {
+  id        String  @id @default(cuid())
+  word      String
+  pageId    String
+  page      Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  tfidf     Float
+  inTitle   Boolean @default(false)
+  inHeading Boolean @default(false)
+  frequency Int
+
+  @@index([word])
+  @@index([pageId])
+}
+
+model Link {
+  id        String @id @default(cuid())
+  sourceUrl String
+  targetUrl String
+  source    Page   @relation("LinkSource", fields: [sourceUrl], references: [url], onDelete: Cascade)
+  target    Page   @relation("LinkTarget", fields: [targetUrl], references: [url], onDelete: Cascade)
+
+  @@unique([sourceUrl, targetUrl])
+  @@index([sourceUrl])
+  @@index([targetUrl])
+}
+
+model CrawlJob {
+  id         String    @id @default(cuid())
+  seedUrls   String[]
+  status     String
+  pagesFound Int       @default(0)
+  errors     Int       @default(0)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+}

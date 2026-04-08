@@ -1,0 +1,22 @@
+{
+  "name": "senko-search",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web \"npm run dev -w @senko/api\" \"npm run dev -w @senko/web\"",
+    "build": "npm run build -ws --if-present",
+    "db:migrate": "npm run db:migrate -w @senko/db",
+    "db:generate": "npm run db:generate -w @senko/db",
+    "db:push": "npm run db:push -w @senko/db",
+    "crawl": "npm run crawl -w @senko/crawler",
+    "index": "npm run index -w @senko/indexer",
+    "worker": "npm run worker -w @senko/api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}
