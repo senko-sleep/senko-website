@@ -46,6 +46,21 @@ export class WebRanker {
     const offset = (page - 1) * perPage;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const safe = options?.safe !== false;
+    const newsDomainConditions = [...NEWS_DOMAINS].map(
+      (domain) => `p.url ILIKE '%${domain.replace(/'/g, "''")}%'`,
+    );
+    const newsWhereSql = options?.newsOnly
+      ? Prisma.raw(`AND (${newsDomainConditions.join(' OR ')})`)
+      : Prisma.sql``;
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM "Page" p
+      WHERE to_tsvector('english', coalesce(p.title, '') || ' ' || coalesce(p.description, '') || ' ' || coalesce(p."bodyText", ''))
+        @@ plainto_tsquery('english', ${q})
+        AND (${safe}::boolean = false OR p."safeFlag" = true)
+        ${newsWhereSql}
+    `);
 
     const rows = await prisma.$queryRaw<
       Array<{
@@ -71,19 +86,13 @@ export class WebRanker {
       WHERE to_tsvector('english', coalesce(p.title, '') || ' ' || coalesce(p.description, '') || ' ' || coalesce(p."bodyText", ''))
         @@ plainto_tsquery('english', ${q})
         AND (${safe}::boolean = false OR p."safeFlag" = true)
+        ${newsWhereSql}
+      ORDER BY fts_rank DESC, p."rankScore" DESC, p."crawledAt" DESC
+      LIMIT ${Math.max(perPage * 5, 50)} OFFSET ${offset}
     `);
 
     const termsLower = query.terms.map((t) => t.toLowerCase());
     const scored = rows
-      .filter((r) => {
-        if (!options?.newsOnly) return true;
-        try {
-          const host = new URL(r.url).hostname.replace(/^www\./, '');
-          return [...NEWS_DOMAINS].some((d) => host.endsWith(d));
-        } catch {
-          return false;
-        }
-      })
       .map((r) => {
         const title = (r.title ?? '').toLowerCase();
         const headings = (r.headings ?? []).join(' ').toLowerCase();
@@ -99,7 +108,7 @@ export class WebRanker {
       })
       .sort((a, b) => b.score - a.score);
 
-    const slice = scored.slice(offset, offset + perPage);
+    const slice = scored.slice(0, perPage);
     const results: SearchResult[] = slice.map(({ r, score }) => ({
       type: 'web' as const,
       score,
@@ -122,7 +131,7 @@ export class WebRanker {
       type: options?.newsOnly ? 'news' : 'web',
       page,
       perPage,
-      totalResults: scored.length,
+      totalResults: Number(totalRows[0]?.total ?? 0),
       results,
     };
 

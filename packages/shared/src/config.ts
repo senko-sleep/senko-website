@@ -46,6 +46,25 @@ const envSchema = z.object({
   PAGERANK_CRON: z.string().default('0 3 * * *'),
   PAGERANK_ITERATIONS: z.coerce.number().int().positive().default(20),
   QUEUE_NAME: z.string().default('senko:crawl'),
+  /**
+   * Comma- or newline-separated crawl start URLs (live web). Used when `POST /api/crawl` omits `seedUrls`.
+   * Nothing is bundled in-repo — set this or pass `seedUrls` in the request body.
+   */
+  SENKO_SEED_URLS: z.string().optional().default(''),
+  /** Defaults for `npm run crawl:enqueue` / crawler CLI `--enqueue` (indexing via API worker). */
+  CRAWL_CLI_MAX_DEPTH: z.coerce.number().int().min(0).max(5).default(2),
+  CRAWL_CLI_MAX_PAGES: z.coerce.number().int().positive().max(5000).default(250),
+  CRAWL_CLI_MAX_SEEDS: z.coerce.number().int().positive().max(200).default(40),
+  /**
+   * Optional [Brave Search API](https://brave.com/search/api/) key. Only used when `WEB_SEARCH_PROVIDER=brave`.
+   * Default `meta` needs no keys (parallel HTML fetch from several engines).
+   */
+  BRAVE_SEARCH_API_KEY: z.string().optional().default(''),
+  /**
+   * `meta` (default) = open web via parallel DuckDuckGo/Bing/Google lite/Brave HTML + Bing images/videos/news — **no API keys**.  
+   * `local` = only your crawl index. `brave` = official Brave JSON API (requires key). `hybrid` = merged meta-web + your index for web results.
+   */
+  WEB_SEARCH_PROVIDER: z.enum(['local', 'meta', 'brave', 'hybrid']).optional().default('meta'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -80,6 +99,10 @@ export const senkoConfig = {
     maxPagesPerJob: parsed.MAX_PAGES_PER_JOB,
     userAgent: parsed.CRAWLER_USER_AGENT,
     queueName: parsed.QUEUE_NAME,
+    seedUrlsEnv: parsed.SENKO_SEED_URLS,
+    cliMaxDepth: parsed.CRAWL_CLI_MAX_DEPTH,
+    cliMaxPages: parsed.CRAWL_CLI_MAX_PAGES,
+    cliMaxSeeds: parsed.CRAWL_CLI_MAX_SEEDS,
   },
   api: {
     port: parsed.API_PORT,
@@ -90,6 +113,10 @@ export const senkoConfig = {
   pagerank: {
     cronSchedule: parsed.PAGERANK_CRON,
     iterations: parsed.PAGERANK_ITERATIONS,
+  },
+  search: {
+    braveApiKey: parsed.BRAVE_SEARCH_API_KEY,
+    webProvider: parsed.WEB_SEARCH_PROVIDER,
   },
 } as const;
 

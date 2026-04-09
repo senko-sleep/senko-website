@@ -1,9 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@senko/db';
-import type { SearchResponse, SearchResult } from '@senko/shared';
+import type { SearchResponse, SearchResult, SearchCache } from '@senko/shared';
 import type { ParsedQuery } from './queryParser.js';
 
 export class GifRanker {
+  constructor(private readonly cache?: SearchCache) {}
+
   async search(query: ParsedQuery, page: number, perPage: number, options?: { safe?: boolean }): Promise<SearchResponse> {
     const q = [query.phrase, ...query.terms].filter(Boolean).join(' ').trim();
     if (!q) {
@@ -11,6 +13,20 @@ export class GifRanker {
     }
     const offset = (page - 1) * perPage;
     const safe = options?.safe !== false;
+    const cacheKey = `search:gif:${q}:${page}:${perPage}:${safe ? '1' : '0'}`;
+
+    if (this.cache) {
+      const hit = await this.cache.get(cacheKey);
+      if (hit) return JSON.parse(hit) as SearchResponse;
+    }
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM "Gif" g
+      WHERE to_tsvector('english', coalesce(g."altText", '') || ' ' || coalesce(g.url, ''))
+        @@ plainto_tsquery('english', ${q})
+        AND (${safe}::boolean = false OR g."safeFlag" = true)
+    `);
 
     const rows = await prisma.$queryRaw<
       Array<{
@@ -22,32 +38,28 @@ export class GifRanker {
         height: number | null;
         crawledAt: Date;
         animated: boolean;
-        rank: number;
+        score: number;
       }>
     >(Prisma.sql`
       SELECT g.id, g.url, g."pageUrl", g."altText", g.width, g.height, g."crawledAt", g.animated,
-        ts_rank(
+        (
+          ts_rank(
           to_tsvector('english', coalesce(g."altText", '') || ' ' || coalesce(g.url, '')),
           plainto_tsquery('english', ${q})
-        ) AS rank
+          )
+          + CASE WHEN g.animated THEN 0.1 ELSE 0 END
+        ) AS score
       FROM "Gif" g
       WHERE to_tsvector('english', coalesce(g."altText", '') || ' ' || coalesce(g.url, ''))
         @@ plainto_tsquery('english', ${q})
         AND (${safe}::boolean = false OR g."safeFlag" = true)
+      ORDER BY score DESC, g."crawledAt" DESC
+      LIMIT ${perPage} OFFSET ${offset}
     `);
 
-    const scored = rows
-      .map((r) => {
-        const animBonus = r.animated ? 0.1 : 0;
-        const score = Number(r.rank) + animBonus;
-        return { r, score };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    const slice = scored.slice(offset, offset + perPage);
-    const results: SearchResult[] = slice.map(({ r, score }) => ({
+    const results: SearchResult[] = rows.map((r) => ({
       type: 'gif' as const,
-      score,
+      score: Number(r.score),
       data: {
         id: r.id,
         url: r.url,
@@ -59,13 +71,19 @@ export class GifRanker {
       },
     }));
 
-    return {
+    const response: SearchResponse = {
       query: q,
       type: 'gif',
       page,
       perPage,
-      totalResults: scored.length,
+      totalResults: Number(totalRows[0]?.total ?? 0),
       results,
     };
+
+    if (this.cache) {
+      await this.cache.set(cacheKey, JSON.stringify(response), 300);
+    }
+
+    return response;
   }
 }

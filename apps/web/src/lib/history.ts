@@ -1,7 +1,7 @@
 const KEY = 'senko-search-history';
 
-/** Primary navigation tabs: All merges web+images+videos+gifs; Search = web; Maps opens external map providers. */
-export type SearchTab = 'all' | 'web' | 'image' | 'video' | 'gif' | 'news' | 'maps';
+/** Primary navigation: web search, images (includes GIFs), videos. */
+export type SearchTab = 'web' | 'image' | 'video';
 
 export interface HistoryEntry {
   query: string;

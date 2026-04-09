@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx src/dev/ensurePort.ts 4000 && tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "worker": "tsx watch src/workers/crawlWorker.ts"
@@ -16,6 +16,7 @@
     "@senko/shared": "*",
     "@upstash/redis": "^1.37.0",
     "bull": "^4.16.3",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",

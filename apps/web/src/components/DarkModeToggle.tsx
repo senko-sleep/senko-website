@@ -10,7 +10,7 @@ export default function DarkModeToggle() {
     <button
       type="button"
       aria-label="Toggle dark mode"
-      className="rounded-full border border-white/50 bg-white/40 p-2.5 text-slate-700 shadow-sm backdrop-blur-xl transition hover:bg-white/60 dark:border-white/10 dark:bg-slate-900/50 dark:text-slate-200 dark:hover:bg-slate-800/60"
+      className="rounded-full border border-black/[0.06] bg-white/70 p-2 text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
     >
       {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}

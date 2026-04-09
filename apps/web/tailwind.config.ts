@@ -6,8 +6,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        display: ['var(--font-sora)', 'system-ui', 'sans-serif'],
-        sans: ['var(--font-dm-sans)', 'system-ui', 'sans-serif'],
+        display: ['Georgia', 'Times New Roman', 'serif'],
+        sans: ['Segoe UI', 'system-ui', 'sans-serif'],
       },
       colors: {
         senko: {

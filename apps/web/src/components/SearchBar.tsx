@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Clock, Sparkles, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from 'react';
+import { Search, Clock, Sparkles, Loader2, ArrowUpRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 import { apiUrl } from '@/lib/api';
-import { loadHistory, saveHistory, type HistoryEntry, type SearchTab } from '@/lib/history';
+import { loadHistory, type HistoryEntry, type SearchTab } from '@/lib/history';
 
 export type { SearchTab };
 
@@ -42,6 +42,8 @@ function SuggestionLabel({ query, text }: { query: string; text: string }) {
 interface SearchBarProps {
   initialQuery?: string;
   compact?: boolean;
+  /** Wide cinematic pill (home) vs compact toolbar (search) */
+  variant?: 'default' | 'hero';
   onSubmitSearch: (q: string, tab: SearchTab) => void;
   activeTab: SearchTab;
   showSubmitButton?: boolean;
@@ -50,6 +52,7 @@ interface SearchBarProps {
 export default function SearchBar({
   initialQuery = '',
   compact = false,
+  variant = 'default',
   onSubmitSearch,
   activeTab,
   showSubmitButton = false,
@@ -61,7 +64,10 @@ export default function SearchBar({
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestAbortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
   const listId = 'senko-suggest-list';
+  const deferredQuery = useDeferredValue(q);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -72,49 +78,90 @@ export default function SearchBar({
   }, [initialQuery]);
 
   const fetchSuggest = useCallback(async (partial: string) => {
-    if (partial.length < 2) {
+    const normalized = partial.trim();
+    if (normalized.length < 1) {
       setSuggestions([]);
       setSuggestLoading(false);
       return;
     }
+
+    suggestAbortRef.current?.abort();
+    const ac = new AbortController();
+    suggestAbortRef.current = ac;
+
+    const requestId = ++requestIdRef.current;
     setSuggestLoading(true);
     try {
-      const res = await axios.get<string[]>(apiUrl(`/api/suggest?q=${encodeURIComponent(partial)}`));
-      setSuggestions(res.data);
-    } catch {
-      setSuggestions([]);
+      const res = await axios.get<string[]>(apiUrl(`/api/suggest?q=${encodeURIComponent(normalized)}`), {
+        signal: ac.signal,
+        timeout: 5_000,
+      });
+      if (requestId === requestIdRef.current) {
+        setSuggestions(res.data);
+      }
+    } catch (e) {
+      if (isAxiosError(e) && e.code === 'ERR_CANCELED') return;
+      if (requestId === requestIdRef.current) {
+        setSuggestions([]);
+      }
     } finally {
-      setSuggestLoading(false);
+      if (requestId === requestIdRef.current) {
+        setSuggestLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      void fetchSuggest(q);
-    }, 300);
+      void fetchSuggest(deferredQuery);
+    }, 120);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [q, fetchSuggest]);
+  }, [deferredQuery, fetchSuggest]);
+
+  const normalizedQuery = q.trim().toLowerCase();
 
   const historyRows = useMemo(
     () =>
       history
-        .filter((h) => h.query.toLowerCase().includes(q.toLowerCase()))
+        .filter((h) => normalizedQuery.length >= 2 && h.query.toLowerCase().startsWith(normalizedQuery))
+        .slice(0, 2)
         .map((h) => ({ kind: 'history' as const, text: h.query, ts: h.timestamp })),
-    [history, q],
+    [history, normalizedQuery],
   );
   const suggestRows = useMemo(
     () => suggestions.map((s) => ({ kind: 'suggest' as const, text: s })),
     [suggestions],
   );
-  const combined = [...historyRows, ...suggestRows].slice(0, 10);
+  const liveRows = useMemo(() => {
+    const seen = new Set<string>();
+    return suggestRows
+      .filter((row) => {
+        const key = row.text.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [suggestRows]);
+  const recentRows = useMemo(() => {
+    if (liveRows.length > 0) return [];
+    const seen = new Set(liveRows.map((row) => row.text.toLowerCase()));
+    return historyRows.filter((row) => {
+      const key = row.text.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [historyRows, liveRows]);
+  const combined = useMemo(() => [...liveRows, ...recentRows], [liveRows, recentRows]);
 
   const showDropdown =
     open &&
     (combined.length > 0 ||
-      (q.length >= 2 && suggestLoading && suggestRows.length === 0 && historyRows.length === 0));
+      (normalizedQuery.length >= 1 && suggestLoading && liveRows.length === 0 && recentRows.length === 0));
 
   useEffect(() => {
     setActiveIdx((i) => Math.min(i, Math.max(0, combined.length - 1)));
@@ -123,6 +170,19 @@ export default function SearchBar({
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setOpen(false);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (open && combined[activeIdx]) {
+        e.preventDefault();
+        const pick = combined[activeIdx]!;
+        setQ(pick.text);
+        onSubmitSearch(pick.text, activeTab);
+        setOpen(false);
+      } else if (q.trim()) {
+        e.preventDefault();
+        submit();
+      }
       return;
     }
     if (!open || combined.length === 0) return;
@@ -134,36 +194,45 @@ export default function SearchBar({
       e.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
     }
-    if (e.key === 'Enter' && combined[activeIdx]) {
-      e.preventDefault();
-      const pick = combined[activeIdx]!;
-      setQ(pick.text);
-      onSubmitSearch(pick.text, activeTab);
-      setOpen(false);
-    }
-  };
-
-  const clearHistory = () => {
-    saveHistory([]);
-    setHistory([]);
   };
 
   const submit = () => {
     if (!q.trim()) return;
+    suggestAbortRef.current?.abort();
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setSuggestLoading(false);
     onSubmitSearch(q.trim(), activeTab);
     setOpen(false);
   };
 
+  const isHero = variant === 'hero';
+  const pillClass = isHero
+    ? 'flex flex-1 items-center gap-3 rounded-full border border-black/[0.06] bg-white/92 pl-4 pr-2 py-2 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#27282b]/88 dark:shadow-[0_18px_40px_-28px_rgba(0,0,0,0.85)]'
+    : `glass-input flex flex-1 items-center gap-3 px-4 ${compact ? 'py-2.5' : 'py-3.5'}`;
+  const inputClass = isHero
+    ? 'flex-1 bg-transparent text-[16px] leading-snug text-slate-900 outline-none placeholder:text-slate-500 dark:text-slate-100 dark:placeholder:text-slate-400'
+    : 'flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500';
+
   return (
-    <div className="relative w-full max-w-2xl">
-      <div className="flex w-full items-center gap-2">
-        <div
-          className={`glass-input flex flex-1 items-center gap-3 px-4 ${compact ? 'py-2.5' : 'py-3.5'}`}
-        >
-          <Search className="h-5 w-5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />
+    <div className={`relative mx-auto w-full ${isHero ? 'max-w-[680px]' : 'max-w-2xl'}`}>
+      <form
+        className={`flex w-full items-center ${isHero ? '' : 'gap-2'}`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <div className={`${pillClass} ${!isHero ? '' : 'focus-within:ring-2 focus-within:ring-[var(--senko-orange)]/25 dark:focus-within:ring-orange-400/20'}`}>
+          <Search
+            className={`shrink-0 ${isHero ? 'h-[18px] w-[18px] text-slate-400 dark:text-slate-500' : 'h-5 w-5 text-slate-400 dark:text-slate-500'}`}
+            aria-hidden
+          />
           <input
-            className="flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
-            placeholder="Search the web, images, videos..."
+            className={inputClass}
+            placeholder={isHero ? 'Ask anything, find anything...' : 'Search the web, images, videos...'}
             value={q}
             aria-expanded={open}
             aria-controls={listId}
@@ -177,17 +246,26 @@ export default function SearchBar({
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
           />
+          {isHero && (
+            <button
+              type="submit"
+              aria-label="Search"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[var(--senko-orange)] to-orange-500 text-white shadow-[0_12px_24px_-14px_rgba(249,115,22,0.9)] transition hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!q.trim()}
+            >
+              <ArrowUpRight className="h-4 w-4" aria-hidden />
+            </button>
+          )}
         </div>
-        {showSubmitButton && (
+        {showSubmitButton && !isHero && (
           <button
-            type="button"
+            type="submit"
             className="rounded-full bg-gradient-to-r from-[var(--senko-orange)] to-orange-500 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 transition hover:brightness-105 active:scale-[0.98]"
-            onClick={submit}
           >
             Search
           </button>
         )}
-      </div>
+      </form>
       <AnimatePresence>
         {showDropdown && (
           <motion.ul
@@ -197,83 +275,36 @@ export default function SearchBar({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18 }}
-            className="absolute left-0 right-0 top-full z-40 mt-2 max-h-[22rem] overflow-auto rounded-2xl border border-white/60 bg-white/85 p-1.5 shadow-glass backdrop-blur-2xl dark:border-white/[0.08] dark:bg-slate-900/90 dark:shadow-glass-dark"
+            className={`absolute left-0 right-0 top-full z-40 mt-2 overflow-auto rounded-[24px] border backdrop-blur-2xl ${
+              isHero
+                ? 'max-h-[20rem] border-black/[0.06] bg-white/88 p-2 shadow-[0_28px_60px_-32px_rgba(15,23,42,0.5)] dark:border-white/[0.08] dark:bg-[#17181b]/92 dark:shadow-[0_32px_70px_-36px_rgba(0,0,0,0.9)]'
+                : 'max-h-[22rem] border-white/60 bg-white/85 p-1.5 shadow-glass dark:border-white/[0.08] dark:bg-slate-900/90 dark:shadow-glass-dark'
+            }`}
           >
-            {historyRows.length > 0 && (
-              <>
-                <li className="flex items-center justify-between px-3 pb-1.5 pt-1">
-                  <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    <Clock className="h-3.5 w-3.5" aria-hidden />
-                    Recent
-                  </span>
-                  <button
-                    type="button"
-                    className="text-[11px] font-medium text-[var(--senko-orange)] hover:underline"
-                    onClick={clearHistory}
-                  >
-                    Clear
-                  </button>
-                </li>
-                {historyRows.map((c, idx) => {
-                  const i = idx;
-                  return (
-                    <li
-                      key={`history-${c.ts}`}
-                      id={`opt-${i}`}
-                      role="option"
-                      aria-selected={i === activeIdx}
-                      onMouseEnter={() => setActiveIdx(i)}
-                    >
-                      <button
-                        type="button"
-                        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-sm transition-colors ${
-                          i === activeIdx
-                            ? 'bg-gradient-to-r from-orange-500/12 to-transparent dark:from-orange-400/10'
-                            : 'hover:bg-white/60 dark:hover:bg-white/[0.04]'
-                        }`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setQ(c.text);
-                          onSubmitSearch(c.text, activeTab);
-                          setOpen(false);
-                        }}
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-200/60 bg-gradient-to-br from-orange-50 to-amber-50/80 text-[var(--senko-orange)] shadow-sm dark:border-orange-500/20 dark:from-orange-950/40 dark:to-amber-950/30">
-                          <Clock className="h-4 w-4" aria-hidden />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <SuggestionLabel query={q} text={c.text} />
-                        </span>
-                        <span className="shrink-0 rounded-full bg-slate-100/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                          Recent
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-                {suggestRows.length > 0 && (
-                  <li className="my-1.5 h-px bg-gradient-to-r from-transparent via-slate-200/80 to-transparent dark:via-white/10" />
-                )}
-              </>
-            )}
-
-            {(suggestRows.length > 0 || (q.length >= 2 && suggestLoading)) && (
+            {liveRows.length > 0 && (
               <li className="flex items-center gap-1.5 px-3 pb-1.5 pt-1">
-                <Sparkles className="h-3.5 w-3.5 text-blue-500 dark:text-sky-400" aria-hidden />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <Sparkles className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
                   Suggestions
                 </span>
-                {suggestLoading && (
-                  <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />
-                )}
+                {suggestLoading && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />}
+              </li>
+            )}
+            {recentRows.length > 0 && (
+              <li className="flex items-center gap-1.5 px-3 pb-1.5 pt-1">
+                <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
+                  Recent
+                </span>
               </li>
             )}
 
-            {suggestRows.map((c, idx) => {
-              const i = historyRows.length + idx;
+            {combined.map((c, idx) => {
+              const i = idx;
+              const isHistory = c.kind === 'history';
               return (
                 <li
-                  key={`suggest-${c.text}-${idx}`}
+                  key={`${c.kind}-${c.text}-${idx}`}
                   id={`opt-${i}`}
                   role="option"
                   aria-selected={i === activeIdx}
@@ -281,10 +312,12 @@ export default function SearchBar({
                 >
                   <button
                     type="button"
-                    className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-sm transition-colors ${
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
                       i === activeIdx
-                        ? 'bg-gradient-to-r from-sky-500/12 to-transparent dark:from-sky-400/10'
-                        : 'hover:bg-white/60 dark:hover:bg-white/[0.04]'
+                        ? isHistory
+                          ? 'bg-slate-100/80 dark:bg-white/[0.06]'
+                          : 'bg-sky-500/[0.08] dark:bg-sky-400/[0.08]'
+                        : 'hover:bg-slate-100/70 dark:hover:bg-white/[0.04]'
                     }`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
@@ -293,28 +326,36 @@ export default function SearchBar({
                       setOpen(false);
                     }}
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/70 bg-gradient-to-br from-sky-50 to-blue-50/90 text-sky-600 shadow-sm dark:border-sky-500/25 dark:from-sky-950/50 dark:to-blue-950/40 dark:text-sky-300">
-                      <Sparkles className="h-4 w-4" aria-hidden />
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      isHistory
+                        ? 'bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400'
+                        : 'bg-sky-100/80 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+                    }`}>
+                      {isHistory ? <Clock className="h-4 w-4" aria-hidden /> : <ArrowUpRight className="h-4 w-4" aria-hidden />}
                     </span>
-                    <span className="min-w-0 flex-1">
+                    <span className="min-w-0 flex-1 pr-2">
                       <SuggestionLabel query={q} text={c.text} />
                     </span>
-                    <span className="shrink-0 rounded-full bg-sky-100/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
-                      Index
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                      isHistory
+                        ? 'bg-slate-200/70 text-slate-500 dark:bg-white/[0.07] dark:text-slate-400'
+                        : 'bg-sky-100/90 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+                    }`}>
+                      {isHistory ? 'Recent' : 'Live'}
                     </span>
                   </button>
                 </li>
               );
             })}
 
-            {q.length >= 2 && suggestLoading && suggestRows.length === 0 && historyRows.length === 0 && (
+            {normalizedQuery.length >= 1 && suggestLoading && liveRows.length === 0 && recentRows.length === 0 && (
               <li className="space-y-2 px-2 py-3">
                 {[0, 1, 2].map((k) => (
                   <div
                     key={k}
-                    className="flex items-center gap-3 rounded-xl px-2.5 py-2"
+                    className="flex items-center gap-3 rounded-2xl px-2.5 py-2"
                   >
-                    <span className="h-9 w-9 animate-pulse rounded-xl bg-slate-200/80 dark:bg-white/10" />
+                    <span className="h-8 w-8 animate-pulse rounded-full bg-slate-200/80 dark:bg-white/10" />
                     <span className="h-4 flex-1 animate-pulse rounded-md bg-slate-200/70 dark:bg-white/10" />
                   </div>
                 ))}

@@ -1,125 +1,23 @@
-export interface SeedUrl {
-  url: string;
-  priority: number;
-}
+import { senkoConfig } from '@senko/shared';
 
-export const DEFAULT_SEEDS: SeedUrl[] = [
-  { url: 'https://en.wikipedia.org/wiki/Web_search_engine', priority: 1.0 },
-  { url: 'https://www.youtube.com/', priority: 0.9 },
-  { url: 'https://giphy.com/', priority: 0.9 },
-  { url: 'https://techcrunch.com/', priority: 0.8 },
-  { url: 'https://www.theverge.com/', priority: 0.8 },
-  { url: 'https://www.wired.com/', priority: 0.8 },
-  { url: 'https://arstechnica.com/', priority: 0.8 },
-  { url: 'https://www.engadget.com/', priority: 0.8 },
-  { url: 'https://www.reuters.com/', priority: 0.8 },
-  { url: 'https://apnews.com/', priority: 0.8 },
-  { url: 'https://www.bbc.com/news', priority: 0.8 },
-  { url: 'https://tenor.com/', priority: 0.85 },
-  { url: 'https://imgur.com/', priority: 0.85 },
-  { url: 'https://www.reddit.com/r/gifs/', priority: 0.85 },
-  { url: 'https://unsplash.com/', priority: 0.85 },
-  { url: 'https://www.pexels.com/', priority: 0.85 },
-  { url: 'https://pixabay.com/', priority: 0.85 },
-  { url: 'https://www.flickr.com/', priority: 0.85 },
-  { url: 'https://vimeo.com/explore', priority: 0.85 },
-  { url: 'https://stackoverflow.com/', priority: 0.9 },
-  { url: 'https://developer.mozilla.org/', priority: 0.9 },
-  { url: 'https://www.nasa.gov/', priority: 0.75 },
-  { url: 'https://www.nationalgeographic.com/', priority: 0.75 },
-  { url: 'https://www.nature.com/', priority: 0.75 },
-  { url: 'https://www.imdb.com/', priority: 0.7 },
-  { url: 'https://www.rottentomatoes.com/', priority: 0.7 },
-  { url: 'https://www.metacritic.com/', priority: 0.7 },
-  { url: 'https://www.data.gov/', priority: 0.65 },
-  { url: 'https://opendata.cern.ch/', priority: 0.65 },
-  { url: 'https://medium.com/', priority: 0.7 },
-  { url: 'https://substack.com/', priority: 0.7 },
-  { url: 'https://dev.to/', priority: 0.75 },
-  { url: 'https://news.ycombinator.com/', priority: 0.8 },
-  { url: 'https://github.com/', priority: 0.85 },
-  { url: 'https://gitlab.com/', priority: 0.75 },
-  { url: 'https://www.cnn.com/', priority: 0.75 },
-  { url: 'https://www.nytimes.com/', priority: 0.75 },
-  { url: 'https://www.theguardian.com/', priority: 0.75 },
-  { url: 'https://www.wsj.com/', priority: 0.7 },
-  { url: 'https://www.bloomberg.com/', priority: 0.7 },
-  { url: 'https://www.ft.com/', priority: 0.65 },
-  { url: 'https://www.economist.com/', priority: 0.7 },
-  { url: 'https://www.politico.com/', priority: 0.65 },
-  { url: 'https://www.washingtonpost.com/', priority: 0.7 },
-  { url: 'https://www.npr.org/', priority: 0.75 },
-  { url: 'https://www.pbs.org/', priority: 0.7 },
-  { url: 'https://www.scientificamerican.com/', priority: 0.75 },
-  { url: 'https://www.newscientist.com/', priority: 0.7 },
-  { url: 'https://phys.org/', priority: 0.65 },
-  { url: 'https://www.space.com/', priority: 0.65 },
-  { url: 'https://www.gamespot.com/', priority: 0.6 },
-  { url: 'https://www.ign.com/', priority: 0.6 },
-  { url: 'https://www.polygon.com/', priority: 0.6 },
-  { url: 'https://www.anandtech.com/', priority: 0.65 },
-  { url: 'https://www.tomshardware.com/', priority: 0.65 },
-  { url: 'https://www.zdnet.com/', priority: 0.65 },
-  { url: 'https://www.cnet.com/', priority: 0.65 },
-  { url: 'https://www.slashdot.org/', priority: 0.65 },
-  { url: 'https://www.producthunt.com/', priority: 0.65 },
-  { url: 'https://news.google.com/', priority: 0.85 },
-  { url: 'https://www.bing.com/news', priority: 0.7 },
-  { url: 'https://duckduckgo.com/', priority: 0.7 },
-  { url: 'https://www.archive.org/', priority: 0.8 },
-  { url: 'https://www.gnu.org/', priority: 0.65 },
-  { url: 'https://opensource.org/', priority: 0.65 },
-  { url: 'https://kubernetes.io/', priority: 0.65 },
-  { url: 'https://nodejs.org/', priority: 0.75 },
-  { url: 'https://react.dev/', priority: 0.75 },
-  { url: 'https://nextjs.org/', priority: 0.75 },
-  { url: 'https://typescriptlang.org/', priority: 0.75 },
-  { url: 'https://rust-lang.org/', priority: 0.7 },
-  { url: 'https://go.dev/', priority: 0.7 },
-  { url: 'https://python.org/', priority: 0.75 },
-  { url: 'https://www.debian.org/', priority: 0.6 },
-  { url: 'https://ubuntu.com/', priority: 0.6 },
-  { url: 'https://www.docker.com/', priority: 0.65 },
-  { url: 'https://redis.io/', priority: 0.65 },
-  { url: 'https://www.postgresql.org/', priority: 0.65 },
-  { url: 'https://sqlite.org/', priority: 0.6 },
-  { url: 'https://www.sqlite.org/', priority: 0.6 },
-  { url: 'https://web.dev/', priority: 0.75 },
-  { url: 'https://webstandards.org/', priority: 0.55 },
-  { url: 'https://www.w3.org/', priority: 0.7 },
-  { url: 'https://ietf.org/', priority: 0.65 },
-  { url: 'https://www.rfc-editor.org/', priority: 0.65 },
-  { url: 'https://semver.org/', priority: 0.5 },
-  { url: 'https://json.org/', priority: 0.55 },
-  { url: 'https://yaml.org/', priority: 0.55 },
-  { url: 'https://www.mongodb.com/', priority: 0.6 },
-  { url: 'https://firebase.google.com/', priority: 0.6 },
-  { url: 'https://supabase.com/', priority: 0.65 },
-  { url: 'https://vercel.com/', priority: 0.65 },
-  { url: 'https://netlify.com/', priority: 0.6 },
-  { url: 'https://cloud.google.com/', priority: 0.65 },
-  { url: 'https://aws.amazon.com/', priority: 0.65 },
-  { url: 'https://azure.microsoft.com/', priority: 0.65 },
-  { url: 'https://www.cloudflare.com/', priority: 0.65 },
-  { url: 'https://fastly.com/', priority: 0.55 },
-  { url: 'https://www.akamai.com/', priority: 0.5 },
-  { url: 'https://stripe.com/', priority: 0.55 },
-  { url: 'https://paypal.com/', priority: 0.55 },
-  { url: 'https://www.shopify.com/', priority: 0.55 },
-  { url: 'https://www.adobe.com/', priority: 0.55 },
-  { url: 'https://www.canva.com/', priority: 0.55 },
-  { url: 'https://figma.com/', priority: 0.6 },
-  { url: 'https://www.sketch.com/', priority: 0.5 },
-  { url: 'https://www.notion.so/', priority: 0.6 },
-  { url: 'https://slack.com/', priority: 0.55 },
-  { url: 'https://discord.com/', priority: 0.55 },
-  { url: 'https://telegram.org/', priority: 0.5 },
-  { url: 'https://www.wikipedia.org/', priority: 1.0 },
-  { url: 'https://commons.wikimedia.org/', priority: 0.85 },
-  { url: 'https://www.khanacademy.org/', priority: 0.75 },
-  { url: 'https://ocw.mit.edu/', priority: 0.75 },
-  { url: 'https://www.coursera.org/', priority: 0.7 },
-  { url: 'https://www.edx.org/', priority: 0.7 },
-  { url: 'https://arxiv.org/', priority: 0.8 },
-  { url: 'https://scholar.google.com/', priority: 0.8 },
-];
+/**
+ * Live crawl entry points only — parsed from `SENKO_SEED_URLS`.
+ * There is no bundled list of sites; indexing always reflects URLs you (or your UI) supply,
+ * then whatever the spider discovers from those pages on the public web.
+ */
+export function resolveSeedUrlList(): string[] {
+  const raw = senkoConfig.crawler.seedUrlsEnv?.trim();
+  if (!raw) return [];
+  return raw
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter((u) => {
+      if (!u.length) return false;
+      try {
+        const parsed = new URL(u);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    });
+}

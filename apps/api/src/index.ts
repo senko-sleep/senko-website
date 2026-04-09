@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import type { Server } from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -59,6 +60,47 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const pr = new PageRank();
 schedulePageRank(pr);
 
-app.listen(senkoConfig.api.port, () => {
+let server: Server | null = null;
+let shuttingDown = false;
+
+function shutdown(exitCode = 0): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  if (!server) {
+    process.exit(exitCode);
+    return;
+  }
+
+  server.close((error) => {
+    if (error) {
+      console.error('[senko] Error while closing API server', error);
+      process.exit(1);
+      return;
+    }
+    process.exit(exitCode);
+  });
+
+  setTimeout(() => {
+    process.exit(exitCode === 0 ? 1 : exitCode);
+  }, 5000).unref();
+}
+
+server = app.listen(senkoConfig.api.port, () => {
   console.log(`Senko API listening on ${senkoConfig.api.port}`);
 });
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `[senko] Port ${senkoConfig.api.port} is already in use. The dev startup guard should normally clean this up, but another process is still holding the port.`,
+    );
+    process.exit(1);
+    return;
+  }
+  console.error('[senko] API server error', error);
+  process.exit(1);
+});
+
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));

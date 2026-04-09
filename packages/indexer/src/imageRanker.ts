@@ -1,9 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@senko/db';
-import type { SearchResponse, SearchResult } from '@senko/shared';
+import type { SearchResponse, SearchResult, SearchCache } from '@senko/shared';
 import type { ParsedQuery } from './queryParser.js';
 
 export class ImageRanker {
+  constructor(private readonly cache?: SearchCache) {}
+
   async search(query: ParsedQuery, page: number, perPage: number, options?: { safe?: boolean }): Promise<SearchResponse> {
     const q = [query.phrase, ...query.terms].filter(Boolean).join(' ').trim();
     if (!q) {
@@ -13,6 +15,44 @@ export class ImageRanker {
     const safe = options?.safe !== false;
     const fmt = query.filters.format?.toLowerCase();
     const minW = query.filters.minWidth;
+    const cacheKey = `search:image:${q}:${page}:${perPage}:${safe ? '1' : '0'}:${fmt ?? ''}:${minW ?? ''}`;
+
+    if (this.cache) {
+      const hit = await this.cache.get(cacheKey);
+      if (hit) return JSON.parse(hit) as SearchResponse;
+    }
+
+    const terms = query.terms.map((t) => t.toLowerCase());
+    const titleMatchSql =
+      terms.length > 0
+        ? Prisma.sql` + CASE WHEN EXISTS (
+            SELECT 1
+            FROM unnest(ARRAY[${Prisma.join(terms)}]::text[]) AS term
+            WHERE lower(coalesce(p.title, '')) LIKE '%' || term || '%'
+          ) THEN 0.3 ELSE 0 END`
+        : Prisma.sql``;
+    const urlMatchSql =
+      terms.length > 0
+        ? Prisma.sql` + CASE WHEN EXISTS (
+            SELECT 1
+            FROM unnest(ARRAY[${Prisma.join(terms)}]::text[]) AS term
+            WHERE lower(i.url) LIKE '%' || term || '%'
+          ) THEN 0.1 ELSE 0 END`
+        : Prisma.sql``;
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM "Image" i
+      LEFT JOIN "Page" p ON p.url = i."pageUrl"
+      WHERE (
+        to_tsvector('english', coalesce(i."altText", '') || ' ' || coalesce(i.url, ''))
+        @@ plainto_tsquery('english', ${q})
+        OR to_tsvector('english', coalesce(p.title, '')) @@ plainto_tsquery('english', ${q})
+      )
+      AND (${safe}::boolean = false OR i."safeFlag" = true)
+      AND (${fmt ?? null}::text IS NULL OR lower(coalesce(i.format, '')) = ${fmt ?? null})
+      AND (${minW ?? null}::int IS NULL OR coalesce(i.width, 0) >= ${minW ?? null})
+    `);
 
     const rows = await prisma.$queryRaw<
       Array<{
@@ -25,15 +65,20 @@ export class ImageRanker {
         format: string | null;
         crawledAt: Date;
         page_title: string | null;
-        rank: number;
+        score: number;
       }>
     >(Prisma.sql`
       SELECT i.id, i.url, i."pageUrl", i."altText", i.width, i.height, i.format, i."crawledAt",
         p.title AS page_title,
-        ts_rank(
+        (
+          ts_rank(
           to_tsvector('english', coalesce(i."altText", '') || ' ' || coalesce(i.url, '')),
           plainto_tsquery('english', ${q})
-        ) AS rank
+          ) * 0.6
+          + CASE WHEN coalesce(i.width, 0) > 800 THEN 0.1 ELSE 0 END
+          ${titleMatchSql}
+          ${urlMatchSql}
+        ) AS score
       FROM "Image" i
       LEFT JOIN "Page" p ON p.url = i."pageUrl"
       WHERE (
@@ -42,36 +87,15 @@ export class ImageRanker {
         OR to_tsvector('english', coalesce(p.title, '')) @@ plainto_tsquery('english', ${q})
       )
       AND (${safe}::boolean = false OR i."safeFlag" = true)
+      AND (${fmt ?? null}::text IS NULL OR lower(coalesce(i.format, '')) = ${fmt ?? null})
+      AND (${minW ?? null}::int IS NULL OR coalesce(i.width, 0) >= ${minW ?? null})
+      ORDER BY score DESC, i."crawledAt" DESC
+      LIMIT ${perPage} OFFSET ${offset}
     `);
 
-    const terms = query.terms.map((t) => t.toLowerCase());
-    let filtered = rows;
-    if (fmt) {
-      filtered = filtered.filter((r) => (r.format ?? '').toLowerCase() === fmt);
-    }
-    if (minW != null) {
-      filtered = filtered.filter((r) => (r.width ?? 0) >= minW);
-    }
-
-    const scored = filtered
-      .map((r) => {
-        const alt = (r.altText ?? '').toLowerCase();
-        const title = (r.page_title ?? '').toLowerCase();
-        const slug = r.url.toLowerCase();
-        const altM = terms.reduce((s, t) => s + (alt.includes(t) ? 1 : 0), 0) / Math.max(terms.length, 1);
-        const altScore = Number(r.rank) * 0.6 + altM * 0.1;
-        const titleScore = terms.some((t) => title.includes(t)) ? 0.3 : 0;
-        const urlScore = terms.some((t) => slug.includes(t)) ? 0.1 : 0;
-        const sizeBonus = (r.width ?? 0) > 800 ? 0.1 : 0;
-        const score = altScore + titleScore + urlScore + sizeBonus;
-        return { r, score };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    const slice = scored.slice(offset, offset + perPage);
-    const results: SearchResult[] = slice.map(({ r, score }) => ({
+    const results: SearchResult[] = rows.map((r) => ({
       type: 'image' as const,
-      score,
+      score: Number(r.score),
       data: {
         id: r.id,
         url: r.url,
@@ -84,13 +108,19 @@ export class ImageRanker {
       },
     }));
 
-    return {
+    const response: SearchResponse = {
       query: q,
       type: 'image',
       page,
       perPage,
-      totalResults: scored.length,
+      totalResults: Number(totalRows[0]?.total ?? 0),
       results,
     };
+
+    if (this.cache) {
+      await this.cache.set(cacheKey, JSON.stringify(response), 300);
+    }
+
+    return response;
   }
 }

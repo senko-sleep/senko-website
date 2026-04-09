@@ -11,7 +11,6 @@ export const BLOCKED_DOMAINS = new Set<string>([
   'instagram.com',
   'login.microsoftonline.com',
   'accounts.google.com',
-  'adult-example.invalid',
 ]);
 
 const defaultRule: CrawlRule = {
@@ -28,7 +27,8 @@ const rulesByDomain = new Map<string, CrawlRule>([
     {
       domain: 'youtube.com',
       maxPagesPerDomain: 200,
-      allowedPathPatterns: [/^\/watch/],
+      /** Home /search/feed are entry points from default seeds; /watch holds real video metadata. */
+      allowedPathPatterns: [/^\/$/, /^\/watch/, /^\/results/, /^\/feed/, /^\/shorts/],
       blockedPathPatterns: [],
       extractMedia: true,
     },

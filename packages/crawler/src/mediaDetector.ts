@@ -17,6 +17,14 @@ function parseSrcset(srcset: string | undefined): string[] {
     .filter(Boolean) as string[];
 }
 
+function parseImageCandidates(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[,\s]+/)
+    .map((part) => part.trim())
+    .filter((part) => Boolean(part) && !/^\d+(w|x)$/i.test(part));
+}
+
 function extractYoutubeId(u: string): string | null {
   try {
     const url = new URL(u);
@@ -61,6 +69,7 @@ export class MediaDetector {
 
     const pushImg = (rawUrl: string | undefined, alt: string | null, w: string | null, h: string | null) => {
       if (!rawUrl) return;
+      if (rawUrl.startsWith('data:') || rawUrl.startsWith('blob:')) return;
       let abs: string;
       try {
         abs = new URL(rawUrl, base).href;
@@ -92,15 +101,46 @@ export class MediaDetector {
       }
     };
 
+    const pushImgVariants = (
+      urls: Array<string | undefined>,
+      alt: string | null,
+      w: string | null,
+      h: string | null,
+    ) => {
+      for (const url of urls) {
+        pushImg(url, alt, w, h);
+      }
+    };
+
     $('img[src]').each((_, el) => {
       const $el = $(el);
-      pushImg($el.attr('src'), $el.attr('alt') ?? null, $el.attr('width') ?? null, $el.attr('height') ?? null);
+      const alt = $el.attr('alt') ?? $el.attr('title') ?? null;
+      const width = $el.attr('width') ?? $el.attr('data-width') ?? null;
+      const height = $el.attr('height') ?? $el.attr('data-height') ?? null;
+      pushImgVariants(
+        [
+          $el.attr('src'),
+          $el.attr('data-src'),
+          $el.attr('data-lazy-src'),
+          $el.attr('data-original'),
+          $el.attr('data-image'),
+          $el.attr('data-fallback-src'),
+          ...parseSrcset($el.attr('srcset')),
+          ...parseSrcset($el.attr('data-srcset')),
+          ...parseImageCandidates($el.attr('data-images')),
+        ],
+        alt,
+        width,
+        height,
+      );
     });
 
     $('[style*="background"]').each((_, el) => {
       const style = $(el).attr('style') || '';
-      const m = style.match(/background(?:-image)?:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
-      if (m?.[1]) pushImg(m[1], null, null, null);
+      const matches = [...style.matchAll(/background(?:-image)?:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/gi)];
+      for (const match of matches) {
+        if (match[1]) pushImg(match[1], null, null, null);
+      }
     });
 
     $('picture source[srcset], source[srcset]').each((_, el) => {
@@ -110,10 +150,59 @@ export class MediaDetector {
       }
     });
 
+    $('source[data-srcset], source[data-src]').each((_, el) => {
+      const $el = $(el);
+      for (const u of parseSrcset($el.attr('data-srcset'))) {
+        pushImg(u, null, null, null);
+      }
+      pushImg($el.attr('data-src'), null, null, null);
+    });
+
     const ogImage = $('meta[property="og:image"]').attr('content');
     pushImg(ogImage, $('meta[property="og:image:alt"]').attr('content') ?? null, null, null);
+    pushImg($('meta[property="og:image:secure_url"]').attr('content'), $('meta[property="og:image:alt"]').attr('content') ?? null, null, null);
     const twImage = $('meta[name="twitter:image"]').attr('content');
     pushImg(twImage, null, null, null);
+    pushImg($('meta[name="twitter:image:src"]').attr('content'), null, null, null);
+    pushImg($('meta[itemprop="image"]').attr('content'), null, null, null);
+
+    $('link[rel="image_src"], link[rel="preload"][as="image"], link[rel="prefetch"][as="image"]').each((_, el) => {
+      pushImg($(el).attr('href'), null, null, null);
+    });
+
+    $('[data-bg], [data-background], [data-bg-src], [data-background-image]').each((_, el) => {
+      const $el = $(el);
+      pushImgVariants(
+        [
+          $el.attr('data-bg'),
+          $el.attr('data-background'),
+          $el.attr('data-bg-src'),
+          $el.attr('data-background-image'),
+        ],
+        null,
+        null,
+        null,
+      );
+    });
+
+    $('noscript').each((_, el) => {
+      const raw = $(el).html();
+      if (!raw) return;
+      const inner = cheerio.load(raw);
+      inner('img').each((__, img) => {
+        const $img = inner(img);
+        pushImgVariants(
+          [
+            $img.attr('src'),
+            $img.attr('data-src'),
+            ...parseSrcset($img.attr('srcset')),
+          ],
+          $img.attr('alt') ?? $img.attr('title') ?? null,
+          $img.attr('width') ?? null,
+          $img.attr('height') ?? null,
+        );
+      });
+    });
 
     if (ogImage?.toLowerCase().endsWith('.gif')) {
       const abs = new URL(ogImage, base).href;

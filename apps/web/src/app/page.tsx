@@ -1,151 +1,87 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import FoxTailLogo from '@/components/FoxTailLogo';
 import SearchBar from '@/components/SearchBar';
-import StartShortcuts from '@/components/StartShortcuts';
 import type { SearchTab } from '@/lib/history';
-import useSWR from 'swr';
-import axios from 'axios';
-import { apiUrl } from '@/lib/api';
 import { addHistory } from '@/lib/history';
 import { useClientDark } from '@/lib/useClientDark';
 import DarkModeToggle from '@/components/DarkModeToggle';
-import SafeSearchToggle, { useSafeSearch } from '@/components/SafeSearchToggle';
+import SafeSearchToggle from '@/components/SafeSearchToggle';
+import { usePrefs } from '@/lib/prefsContext';
 
 const tabs: { id: SearchTab; label: string }[] = [
-  { id: 'all', label: 'All' },
   { id: 'web', label: 'Search' },
   { id: 'image', label: 'Images' },
   { id: 'video', label: 'Videos' },
-  { id: 'maps', label: 'Maps' },
-  { id: 'news', label: 'News' },
 ];
 
 export default function HomePage() {
   const router = useRouter();
   const clientDark = useClientDark();
-  const [tab, setTab] = useState<SearchTab>('all');
-  const [safe, setSafe] = useSafeSearch();
-
-  const { data: trending } = useSWR(
-    apiUrl('/api/trending'),
-    async (u) => {
-      try {
-        const res = await axios.get<{ trending: { query: string; score: number }[] }>(u);
-        return res.data;
-      } catch {
-        return { trending: [] as { query: string; score: number }[] };
-      }
-    },
-    { refreshInterval: 60_000, shouldRetryOnError: false },
-  );
+  const { safeSearch, setSafeSearch, activeTab, setActiveTab } = usePrefs();
 
   const onSubmit = (q: string, t: SearchTab) => {
     addHistory(q, t);
-    router.push(`/search?q=${encodeURIComponent(q)}&type=${t}`);
+    router.push(`/search?q=${encodeURIComponent(q)}&type=${t}&safe=${safeSearch ? '1' : '0'}`);
   };
 
   return (
-    <main className="relative min-h-screen text-slate-900 dark:text-slate-100">
-      <header className="absolute right-0 top-0 z-20 flex items-center gap-3 p-4 md:p-6">
-        <SafeSearchToggle safe={safe} onChange={setSafe} />
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#eef1f4] text-slate-900 dark:bg-[#111214] dark:text-slate-100">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-[16%] h-64 w-64 -translate-x-1/2 rounded-full bg-[var(--senko-orange)]/10 blur-3xl dark:bg-[var(--senko-orange)]/14" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent dark:via-white/10" />
+      </div>
+      <header className="absolute right-0 top-0 z-20 flex items-center gap-2 p-3 md:p-4">
+        <SafeSearchToggle safe={safeSearch} onChange={setSafeSearch} compact />
         <DarkModeToggle />
       </header>
 
-      <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 pb-20 pt-10 md:px-6 md:pt-16">
-        <motion.div
-          className="glass-strong relative overflow-hidden px-6 py-10 md:px-10 md:py-12"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-blue-400/20 to-[var(--senko-orange)]/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-gradient-to-tr from-indigo-400/15 to-transparent blur-2xl" />
+      <div className="relative flex flex-1 flex-col items-center justify-center px-4 pb-20 pt-14 md:px-6">
+        <div className="mx-auto flex w-full max-w-[760px] flex-col items-center text-center">
+          <FoxTailLogo size={72} animated glowing={clientDark} />
+          <h1 className="mt-4 font-display text-[2.6rem] font-normal tracking-tight text-slate-800 md:text-[4.2rem] dark:text-slate-50">
+            Senko
+          </h1>
+          <p className="mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
+            Faster search, cleaner suggestions, and a lighter surface.
+          </p>
 
-          <div className="relative flex flex-col items-center text-center">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.05, duration: 0.45 }}
-            >
-              <FoxTailLogo size={112} animated glowing={clientDark} />
-            </motion.div>
-            <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-slate-900 md:text-5xl dark:text-white">
-              Senko Search
-            </h1>
-            <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-              Quick as a fox, sharp as a search.
-            </p>
-
-            <div className="mt-8 w-full max-w-xl">
-              <SearchBar onSubmitSearch={onSubmit} activeTab={tab} showSubmitButton />
-            </div>
-
-            <div className="mt-5 flex flex-wrap justify-center gap-1.5">
-              {tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`glass-tab ${tab === t.id ? 'glass-tab-active' : ''}`}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+          <div className="mt-7 w-full self-center">
+            <SearchBar
+              variant="hero"
+              onSubmitSearch={onSubmit}
+              activeTab={activeTab}
+              showSubmitButton={false}
+            />
           </div>
-        </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.45 }}
-        >
-          <StartShortcuts />
-        </motion.div>
-
-        {trending && trending.trending.length > 0 && (
-          <motion.div
-            className="glass mt-8 p-5 md:p-6"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
+          <nav
+            className="mt-6 flex max-w-lg flex-wrap justify-center gap-x-5 gap-y-2 text-sm"
+            aria-label="Search categories"
           >
-            <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Trending now
-            </h2>
-            <ul className="mt-4 space-y-3">
-              {trending.trending.map((item, i) => (
-                <li key={item.query} className="flex items-center gap-3 text-sm">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/50 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                    {i + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 truncate text-left font-medium text-[var(--senko-orange)] hover:underline"
-                    onClick={() => onSubmit(item.query, 'web')}
-                  >
-                    {item.query}
-                  </button>
-                  <span className="hidden h-2 w-20 overflow-hidden rounded-full bg-slate-200/80 sm:block dark:bg-white/10">
-                    <span
-                      className="block h-full rounded-full bg-gradient-to-r from-[var(--senko-orange)] to-orange-400"
-                      style={{ width: `${Math.min(100, item.score * 5)}%` }}
-                    />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        )}
-
-        <footer className="mt-auto pt-16 text-center text-xs text-slate-500 dark:text-slate-500">
-          Senko Search — glass, fast, curious.
-        </footer>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`rounded-full px-1 py-0.5 transition-colors ${
+                  activeTab === t.id
+                    ? 'font-medium text-slate-900 underline decoration-slate-400 decoration-1 underline-offset-4 dark:text-white dark:decoration-slate-500'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                onClick={() => setActiveTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </div>
+
+      <footer className="pb-6 text-center text-[11px] text-slate-400 dark:text-slate-600">
+        Senko Search
+      </footer>
     </main>
   );
 }

@@ -14,7 +14,17 @@ export function getCrawlQueue(): Bull.Queue<CrawlJobPayload> | null {
   const url = senkoConfig.redis.url?.trim();
   if (!url) return null;
   if (!queue) {
-    queue = new Bull<CrawlJobPayload>(senkoConfig.crawler.queueName, url);
+    try {
+      queue = new Bull<CrawlJobPayload>(senkoConfig.crawler.queueName, url);
+      queue.on('error', (err) => {
+        console.warn('[senko] Bull queue error, crawl features disabled:', err.message);
+        queue = null;
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.warn('[senko] Failed to create Bull queue, crawl features disabled:', msg);
+      return null;
+    }
   }
   return queue;
 }

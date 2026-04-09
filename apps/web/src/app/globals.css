@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes senko-route-progress {
+  0% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.senko-route-progress {
+  animation: senko-route-progress 0.85s ease-in-out infinite;
+}
+
 :root {
   --senko-orange: #ff6b2b;
   --senko-orange-dark: #e85a20;

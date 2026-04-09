@@ -1,12 +1,15 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { resolveSeedUrlList } from '@senko/crawler';
+import { senkoConfig } from '@senko/shared';
 import { prisma } from '@senko/db';
 import { getCrawlQueue } from '../queue.js';
 
 const startBody = z.object({
-  seedUrls: z.array(z.string().url()),
-  maxDepth: z.number().max(5).optional().default(2),
-  maxPages: z.number().max(2000).optional().default(200),
+  /** Omit to use `SENKO_SEED_URLS` from the environment (still required together or via this array). */
+  seedUrls: z.array(z.string().url()).optional(),
+  maxDepth: z.coerce.number().max(5).optional(),
+  maxPages: z.coerce.number().max(2000).optional(),
 });
 
 export async function startCrawlHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -19,19 +22,30 @@ export async function startCrawlHandler(req: Request, res: Response, next: NextF
       });
       return;
     }
-    const body = startBody.parse(req.body);
+    const body = startBody.parse(req.body ?? {});
+    const fromEnv = resolveSeedUrlList().slice(0, senkoConfig.crawler.cliMaxSeeds);
+    const seedUrls = body.seedUrls?.length ? body.seedUrls : fromEnv;
+    if (seedUrls.length === 0) {
+      res.status(400).json({
+        error:
+          'No crawl seeds: pass non-empty `seedUrls` in the JSON body or set `SENKO_SEED_URLS` in the environment. The indexer does not ship a hardcoded site list.',
+      });
+      return;
+    }
+    const maxDepth = body.maxDepth ?? senkoConfig.crawler.cliMaxDepth;
+    const maxPages = body.maxPages ?? senkoConfig.crawler.cliMaxPages;
     const job = await prisma.crawlJob.create({
       data: {
-        seedUrls: body.seedUrls,
+        seedUrls,
         status: 'queued',
       },
     });
     await crawlQueue.add(
       {
         jobId: job.id,
-        seedUrls: body.seedUrls,
-        maxDepth: body.maxDepth,
-        maxPages: body.maxPages,
+        seedUrls,
+        maxDepth,
+        maxPages,
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     );
