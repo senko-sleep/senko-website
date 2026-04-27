@@ -19,9 +19,9 @@ import { addHistory } from '@/lib/history';
 import { useClientDark } from '@/lib/useClientDark';
 import { usePrefs } from '@/lib/prefsContext';
 import { prefetchUrl } from '@/lib/prefetch';
-import { ExternalLink, Database, AlertCircle, ZoomIn, X, Globe } from 'lucide-react';
+import { ExternalLink, Database, AlertCircle, ZoomIn, X, Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { displayUrlCompact, hostnameFromUrl, siteTitleFromHostname } from '@/lib/site';
-import { embedPlayerUrl, videoPosterSrc, youtubeIdFromPageUrl, youtubePosterUrl } from '@/lib/videoEmbed';
+import { embedPlayerUrl, isDirectVideoAssetUrl, videoPosterSrc, youtubeIdFromPageUrl, youtubePosterUrl } from '@/lib/videoEmbed';
 
 const MAIN_TABS: { id: SearchTab; label: string }[] = [
   { id: 'web', label: 'Search' },
@@ -114,70 +114,66 @@ function ImageMasonryCardInner({ img, index, onOpenLightbox, onLoadFailed, query
   return (
     <article className="group/img mb-4 break-inside-avoid rounded-[14px] focus-within:ring-2 focus-within:ring-[var(--senko-orange)]/50 focus-within:ring-offset-2 focus-within:ring-offset-[#0b0e14] dark:focus-within:ring-offset-slate-950">
       <div className="relative overflow-hidden rounded-[14px] bg-[#141820] shadow-[0_6px_22px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.06] transition-shadow duration-150 hover:shadow-[0_12px_32px_rgba(0,0,0,0.32)] hover:ring-white/10 dark:bg-[#0d1117] dark:ring-white/[0.08]">
+
+        {/* Zoom / lightbox button — contains only the image, no interactive children */}
         <button
           type="button"
           className="relative block w-full cursor-zoom-in text-left outline-none"
           onClick={() => onOpenLightbox(index)}
           aria-label={img.altText ? `Open image: ${img.altText}` : 'Open image'}
         >
-          <div className="relative w-full overflow-hidden bg-[#141820]">
-            {/* eslint-disable-next-line @next/next/no-img-element -- natural GIF/static aspect; Next fill+cover cropped unevenly */}
-            <img
-              src={img.url}
-              alt={img.altText ?? ''}
-              className="h-auto w-full object-contain transition-transform duration-150 ease-out group-hover/img:scale-[1.02]"
-              loading="lazy"
-              decoding="async"
-              onError={() => onLoadFailed(img.id)}
-            />
-          </div>
-
-          <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-0 transition-opacity duration-150 group-hover/img:opacity-100"
-            aria-hidden
+          {/* eslint-disable-next-line @next/next/no-img-element -- natural GIF/static aspect */}
+          <img
+            src={img.url}
+            alt={img.altText ?? ''}
+            className="h-auto w-full object-contain transition-transform duration-150 ease-out group-hover/img:scale-[1.02]"
+            loading="lazy"
+            decoding="async"
+            onError={() => onLoadFailed(img.id)}
           />
-
-          <div className="pointer-events-none absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-150 group-hover/img:opacity-100">
-            <ZoomIn className="h-4 w-4" aria-hidden />
-          </div>
-
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 pt-10 opacity-0 transition-opacity duration-150 group-hover/img:pointer-events-auto group-hover/img:opacity-100">
-            <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-[13px] font-medium leading-snug text-white drop-shadow-md">
-                  {highlight(img.altText, query)}
-                </p>
-                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/85">
-                  <SiteFavicon hostname={host} size={16} />
-                  <span className="truncate">{siteLabel}</span>
-                  {dim ? <span className="shrink-0 text-white/50">· {dim}</span> : null}
-                </div>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <a
-                href={img.pageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="pointer-events-auto inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-white/25"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="h-3 w-3 opacity-90" />
-                Source
-              </a>
-              <button
-                type="button"
-                className="pointer-events-auto rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-white/25"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void navigator.clipboard.writeText(img.url);
-                }}
-              >
-                Copy link
-              </button>
-            </div>
-          </div>
         </button>
+
+        {/* Hover overlay — sibling of the button so action buttons are never nested inside it */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-0 transition-opacity duration-150 group-hover/img:opacity-100"
+          aria-hidden
+        />
+
+        {/* Zoom icon badge */}
+        <div className="pointer-events-none absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-150 group-hover/img:opacity-100">
+          <ZoomIn className="h-4 w-4" aria-hidden />
+        </div>
+
+        {/* Info + action bar — absolutely positioned sibling, NOT inside the zoom button */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 pt-10 opacity-0 transition-opacity duration-150 group-hover/img:pointer-events-auto group-hover/img:opacity-100">
+          <p className="line-clamp-2 text-[13px] font-medium leading-snug text-white drop-shadow-md">
+            {highlight(img.altText, query)}
+          </p>
+          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/85">
+            <SiteFavicon hostname={host} size={16} />
+            <span className="truncate">{siteLabel}</span>
+            {dim ? <span className="shrink-0 text-white/50">· {dim}</span> : null}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <a
+              href={img.pageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-white/25"
+            >
+              <ExternalLink className="h-3 w-3 opacity-90" />
+              Source
+            </a>
+            <button
+              type="button"
+              className="rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-white/25"
+              onClick={() => void navigator.clipboard.writeText(img.url)}
+            >
+              Copy link
+            </button>
+          </div>
+        </div>
+
       </div>
     </article>
   );
@@ -196,9 +192,16 @@ type VideoHitData = {
   platform: string | null;
 };
 
-function VideoResultTile({ v, onOpen }: { v: VideoHitData; onOpen: () => void }) {
+function VideoResultTile({
+  v,
+  onOpen,
+}: {
+  v: VideoHitData;
+  onOpen: () => void;
+}) {
   const host = hostnameFromUrl(v.pageUrl);
   const site = siteTitleFromHostname(host);
+  const isDirect = isDirectVideoAssetUrl(v.url);
   const badge =
     v.platform?.trim() && v.platform.toLowerCase() !== 'web' ? v.platform.trim() : site;
   const initial = videoPosterSrc(v.thumbnailUrl, v.url);
@@ -219,42 +222,56 @@ function VideoResultTile({ v, onOpen }: { v: VideoHitData; onOpen: () => void })
     else setPoster(undefined);
   }, [poster, v.url]);
 
+  const browseHref = `/browse?url=${encodeURIComponent(v.url)}`;
+
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group/vid relative overflow-hidden rounded-2xl border border-white/20 bg-white/[0.06] text-left shadow-[0_4px_24px_-6px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition hover:border-white/[0.18] hover:bg-white/[0.09] dark:border-white/[0.09] dark:bg-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.07]"
-    >
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 dark:border-white/[0.06]">
-        <SiteFavicon hostname={host} size={20} />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {badge}
-        </span>
-      </div>
-      <div className="relative aspect-video w-full overflow-hidden bg-slate-950/90">
-        {poster ? (
-          // eslint-disable-next-line @next/next/no-img-element -- video poster URLs from many CDNs
-          <img
-            src={poster}
-            alt=""
-            className="h-full w-full object-cover transition duration-300 group-hover/vid:scale-[1.02]"
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={onImgError}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-slate-800/80 to-slate-950 text-xs text-slate-500">
-            No preview
-          </div>
-        )}
-      </div>
-      <div className="border-t border-white/10 px-3 py-3 dark:border-white/[0.06]">
-        <p className="line-clamp-2 text-sm font-medium leading-snug text-slate-800 dark:text-slate-100">
+    <article className="group/vid relative overflow-hidden rounded-2xl border border-white/20 bg-white/[0.06] text-left shadow-[0_4px_24px_-6px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition hover:border-white/[0.18] hover:bg-white/[0.09] dark:border-white/[0.09] dark:bg-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.07]">
+      <button type="button" onClick={onOpen} className="block w-full text-left">
+        <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 dark:border-white/[0.06]">
+          <SiteFavicon hostname={host} size={20} />
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {badge}
+          </span>
+          {isDirect && (
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              MP4
+            </span>
+          )}
+        </div>
+        <div className="relative aspect-video w-full overflow-hidden bg-slate-950/90">
+          {poster ? (
+            // eslint-disable-next-line @next/next/no-img-element -- video poster URLs from many CDNs
+            <img
+              src={poster}
+              alt=""
+              className="h-full w-full object-cover transition duration-300 group-hover/vid:scale-[1.02]"
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={onImgError}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-slate-800/80 to-slate-950 text-xs text-slate-500">
+              No preview
+            </div>
+          )}
+        </div>
+      </button>
+      <div className="flex items-start gap-2 border-t border-white/10 px-3 py-2.5 dark:border-white/[0.06]">
+        <p className="min-w-0 flex-1 line-clamp-2 text-sm font-medium leading-snug text-slate-800 dark:text-slate-100">
           {v.title?.trim() || 'Untitled video'}
         </p>
+        <Link
+          href={browseHref}
+          onMouseEnter={() => prefetchUrl(browseHref)}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-600 transition hover:bg-white/10 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          aria-label="Open in theater / browse"
+          title="Theater & full screen"
+        >
+          <Maximize2 className="h-4 w-4" aria-hidden />
+        </Link>
       </div>
-    </button>
+    </article>
   );
 }
 
@@ -264,64 +281,49 @@ function WebResultCard({ p, q, safeParam }: { p: WebHitData; q: string; safePara
   const snippet = p.description?.trim() ?? '';
   const urlShown = displayUrlCompact(p.url);
   return (
-    <article className="group/result relative overflow-hidden rounded-2xl border border-white/25 bg-white/[0.55] p-5 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.12)] backdrop-blur-2xl transition duration-200 hover:border-white/40 hover:bg-white/[0.7] hover:shadow-[0_8px_32px_-8px_rgba(15,23,42,0.15)] dark:border-white/[0.09] dark:bg-white/[0.045] dark:shadow-[0_4px_28px_-6px_rgba(0,0,0,0.45)] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.07] dark:hover:shadow-[0_8px_36px_-8px_rgba(0,0,0,0.55)]">
-      <div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/50 via-white/5 to-transparent opacity-90 dark:from-white/[0.06] dark:via-transparent dark:to-transparent dark:opacity-100"
-        aria-hidden
-      />
-      <div className="relative flex gap-4">
-        <div className="shrink-0">
-          <div className="rounded-xl border border-black/[0.06] bg-white/75 p-2 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-            <SiteFavicon hostname={host} size={32} />
-          </div>
+    <article className="group/result py-4 first:pt-1">
+      {/* Site identity row */}
+      <div className="mb-1 flex items-center gap-1.5">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-slate-200 dark:bg-white/[0.06] dark:ring-white/10">
+          <SiteFavicon hostname={host} size={14} />
         </div>
-        <div className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold tracking-tight text-slate-800 dark:text-slate-100">
-            {siteLabel}
-          </span>
-          <p
-            className="mt-1 truncate font-mono text-[11px] leading-snug text-slate-500 dark:text-slate-400"
-            title={p.url}
-          >
-            {urlShown}
-          </p>
-          <a
-            href={p.url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 block text-[1.02rem] font-semibold leading-snug tracking-tight text-slate-900 decoration-slate-400/60 underline-offset-4 transition hover:text-[var(--senko-orange)] hover:decoration-[var(--senko-orange)]/50 dark:text-slate-50 dark:decoration-white/20 dark:hover:text-[var(--senko-orange)]"
-            onMouseEnter={() => prefetchUrl(`/search?q=${encodeURIComponent(q)}&type=web&page=1&safe=${safeParam}`)}
-          >
-            {p.title?.trim() ? highlight(p.title, q) : <span className="font-normal opacity-60">Untitled page</span>}
-          </a>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Link
-              href={`/browse?url=${encodeURIComponent(p.url)}`}
-              onMouseEnter={() => prefetchUrl(`/browse?url=${encodeURIComponent(p.url)}`)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/80 bg-white/50 px-3 py-1.5 text-xs font-medium text-slate-700 backdrop-blur-sm transition hover:border-[var(--senko-orange)]/40 hover:bg-white/80 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-200 dark:hover:border-[var(--senko-orange)]/35 dark:hover:bg-white/[0.1]"
-            >
-              <Globe className="h-3.5 w-3.5 opacity-80" aria-hidden />
-              Browse here
-            </Link>
-            <Link
-              href={`/browse?url=${encodeURIComponent(p.url)}&mode=proxy`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/60 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-400 dark:border-white/12 dark:text-slate-400 dark:hover:border-white/20"
-            >
-              Proxy view
-            </Link>
-          </div>
-          <div className="mt-3.5 border-t border-slate-200/70 pt-3.5 dark:border-white/[0.07]">
-            {snippet ? (
-              <p className="text-[0.9375rem] leading-relaxed text-slate-600 dark:text-slate-400">
-                {highlight(snippet, q)}
-              </p>
-            ) : (
-              <p className="text-[0.9375rem] italic leading-relaxed text-slate-400 dark:text-slate-500">
-                No description snippet available for this result. Open the site to read more.
-              </p>
-            )}
-          </div>
-        </div>
+        <span className="text-[13px] font-medium text-slate-700 dark:text-slate-300">{siteLabel}</span>
+        <span className="text-slate-300 dark:text-white/20">›</span>
+        <span className="truncate text-[12px] text-slate-400 dark:text-slate-500" title={p.url}>{urlShown}</span>
+      </div>
+
+      {/* Title */}
+      <a
+        href={p.url}
+        target="_blank"
+        rel="noreferrer"
+        className="mb-1 block text-[18px] font-normal leading-snug text-blue-600 underline-offset-2 transition hover:underline dark:text-blue-400"
+        onMouseEnter={() => prefetchUrl(`/search?q=${encodeURIComponent(q)}&type=web&page=1&safe=${safeParam}`)}
+      >
+        {p.title?.trim() ? highlight(p.title, q) : <span className="opacity-40">Untitled</span>}
+      </a>
+
+      {/* Snippet */}
+      <p className={`text-[13.5px] leading-[1.6] line-clamp-2 ${snippet ? 'text-slate-600 dark:text-slate-400' : 'italic text-slate-400 dark:text-slate-500'}`}>
+        {snippet ? highlight(snippet, q) : 'No description available.'}
+      </p>
+
+      {/* Action row — appears on hover */}
+      <div className="mt-1.5 flex items-center gap-3 opacity-0 transition-opacity group-hover/result:opacity-100">
+        <Link
+          href={`/browse?url=${encodeURIComponent(p.url)}`}
+          onMouseEnter={() => prefetchUrl(`/browse?url=${encodeURIComponent(p.url)}`)}
+          className="inline-flex items-center gap-1 text-[12px] text-slate-400 transition hover:text-[var(--senko-orange)] dark:hover:text-[var(--senko-orange)]"
+        >
+          <Globe className="h-3 w-3" aria-hidden />
+          Browse
+        </Link>
+        <Link
+          href={`/browse?url=${encodeURIComponent(p.url)}&mode=proxy`}
+          className="text-[12px] text-slate-400 transition hover:text-[var(--senko-orange)] dark:hover:text-[var(--senko-orange)]"
+        >
+          Proxy
+        </Link>
       </div>
     </article>
   );
@@ -350,6 +352,8 @@ export default function SearchPageContent() {
 
   const [lightbox, setLightbox] = useState<{ items: MediaItem[]; index: number } | null>(null);
   const [videoModal, setVideoModal] = useState<string | null>(null);
+  const videoStageRef = useRef<HTMLDivElement>(null);
+  const [videoStageFs, setVideoStageFs] = useState(false);
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
   const { safeSearch, setSafeSearch, setActiveTab, prefsReady } = usePrefs();
 
@@ -598,78 +602,92 @@ export default function SearchPageContent() {
       ? imageIsLoading || imageIsValidating
       : Boolean(singleKey) && (singleIsLoading || singleIsValidating));
 
-  const videoEmbedSrc = videoModal ? embedPlayerUrl(videoModal) : null;
+  const videoEmbedSrc = videoModal
+    ? embedPlayerUrl(videoModal, { autoplay: true, allowInlineFullscreen: true })
+    : null;
+
+  useEffect(() => {
+    const onFs = () => setVideoStageFs(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  useEffect(() => {
+    if (!videoModal && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      setVideoStageFs(false);
+    }
+  }, [videoModal]);
+
+  const toggleVideoStageFullscreen = useCallback(async () => {
+    const el = videoStageRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) await el.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   return (
-    <div className="min-h-screen text-slate-900 dark:text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-white/40 bg-white/55 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-slate-950/55 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3.5">
-          <div className="flex items-center justify-between gap-3 sm:contents">
-            <button type="button" className="flex shrink-0 items-center gap-2" onClick={() => router.push('/')}>
-              <FoxTailLogo size={32} animated={false} glowing={clientDark} />
-              <span className="font-display text-xl font-bold tracking-tight text-slate-900 dark:text-white">Senko</span>
-            </button>
-            <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
-              <SafeSearchToggle safe={safeSearch} onChange={onSafeChange} compact />
-              <DarkModeToggle />
-            </div>
-          </div>
-          <div className="min-w-0 flex-1">
+    <div className="min-h-screen bg-white text-slate-900 dark:bg-[#0f1117] dark:text-slate-100">
+      {/* Header — clean white/dark bar, no glass blur */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0f1117]">
+        <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-2.5 sm:gap-5 sm:px-6">
+          {/* Logo */}
+          <button type="button" className="flex shrink-0 items-center gap-2 mr-1" onClick={() => router.push('/')}>
+            <FoxTailLogo size={28} animated={false} glowing={clientDark} />
+            <span className="hidden font-display text-[18px] font-bold tracking-tight text-slate-900 dark:text-white sm:block">Senko</span>
+          </button>
+
+          {/* Search bar */}
+          <div className="min-w-0 flex-1 max-w-[620px]">
             <SearchBar initialQuery={q} compact onSubmitSearch={onSubmit} activeTab={type} />
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
-            <SafeSearchToggle safe={safeSearch} onChange={onSafeChange} />
+
+          {/* Controls */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <SafeSearchToggle safe={safeSearch} onChange={onSafeChange} compact />
             <DarkModeToggle />
           </div>
         </div>
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 border-t border-white/20 px-3 pb-3 pt-2 dark:border-white/[0.04] sm:px-4">
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 flex flex-1 items-center gap-x-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {MAIN_TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                    type === t.id
-                      ? 'bg-white/70 font-semibold text-slate-900 shadow-sm dark:bg-white/10 dark:text-white'
-                      : 'text-slate-500 hover:bg-white/40 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200'
-                  }`}
-                  onClick={() => {
-                    setActiveTab(t.id);
-                    router.push(
-                      `/search?q=${encodeURIComponent(q)}&type=${t.id}&page=1&safe=${safeParam}`,
-                    );
-                  }}
-                  onMouseEnter={() =>
-                    prefetchUrl(`/search?q=${encodeURIComponent(q)}&type=${t.id}&page=1&safe=${safeParam}`)
-                  }
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <span className="shrink-0 text-xs tabular-nums text-slate-500 sm:text-sm dark:text-slate-400">
-                {type === 'image' && visibleImageResults.length > 0 ? (
-                  <>
-                    <span className="tabular-nums text-slate-600 dark:text-slate-300">
-                      {visibleImageResults.length}
-                    </span>{' '}
-                    shown · ~
-                  </>
-                ) : null}
-                {data?.totalResults ?? 0}
-              </span>
-          </div>
+
+        {/* Tab row */}
+        <div className="mx-auto flex max-w-[1200px] items-center gap-0.5 border-t border-slate-100 px-4 dark:border-white/[0.05] sm:px-6">
+          {MAIN_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`relative shrink-0 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                type === t.id
+                  ? 'text-[var(--senko-orange)] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:rounded-t-full after:bg-[var(--senko-orange)]'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+              onClick={() => {
+                setActiveTab(t.id);
+                router.push(`/search?q=${encodeURIComponent(q)}&type=${t.id}&page=1&safe=${safeParam}`);
+              }}
+              onMouseEnter={() => prefetchUrl(`/search?q=${encodeURIComponent(q)}&type=${t.id}&page=1&safe=${safeParam}`)}
+            >
+              {t.label}
+            </button>
+          ))}
+          <span className="ml-auto shrink-0 text-[12px] tabular-nums text-slate-400 dark:text-slate-500">
+            {type === 'image' && visibleImageResults.length > 0 ? `${visibleImageResults.length} shown · ` : ''}
+            {(data?.totalResults ?? 0).toLocaleString()} results
+          </span>
         </div>
+
         {resultsBusy && (
-          <div className="h-0.5 w-full overflow-hidden bg-orange-500/25" aria-hidden>
+          <div className="h-[2px] w-full overflow-hidden bg-orange-500/15" aria-hidden>
             <div className="senko-route-progress h-full w-1/3 bg-[var(--senko-orange)]" />
           </div>
         )}
       </header>
 
       <main
-        className={`mx-auto px-3 py-4 sm:px-4 md:px-6 ${type === 'image' ? 'max-w-[min(100vw,88rem)]' : 'max-w-6xl'} ${type === 'image' ? 'md:py-6' : 'py-8'}`}
+        className={`mx-auto px-4 sm:px-6 ${type === 'image' ? 'max-w-[min(100vw,88rem)] py-4 md:py-6' : 'max-w-[1200px] py-5'}`}
       >
         {resultsLoading && type === 'image' && (
           <div className="columns-2 gap-x-2 sm:gap-x-3 md:columns-5">
@@ -684,12 +702,18 @@ export default function SearchPageContent() {
         )}
 
         {resultsLoading && type !== 'image' && (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-24 animate-pulse rounded-2xl bg-gradient-to-r from-white/40 via-white/20 to-white/40 dark:from-white/5 dark:via-white/10 dark:to-white/5"
-              />
+          <div className="max-w-[660px] divide-y divide-slate-100 dark:divide-white/[0.05]">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="py-4">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="h-5 w-5 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                  <span className="h-3 w-24 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                  <span className="h-3 w-40 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                </div>
+                <span className="mb-1 block h-[18px] w-3/4 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                <span className="block h-3.5 w-full animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                <span className="mt-1 block h-3.5 w-5/6 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+              </div>
             ))}
           </div>
         )}
@@ -767,7 +791,7 @@ export default function SearchPageContent() {
         )}
 
         {!resultsLoading && !error && data && type === 'web' && (
-          <div className="space-y-4">
+          <div className="max-w-[660px] divide-y divide-slate-100 dark:divide-white/[0.05]">
             {data.results.map((r) => {
               const p = r.data as WebHitData;
               return <WebResultCard key={p.id} p={p} q={q} safeParam={safeParam} />;
@@ -823,10 +847,10 @@ export default function SearchPageContent() {
         )}
 
         {type !== 'image' && !error && data && data.totalResults > 0 && (
-          <div className="mt-10 flex justify-center gap-4">
+          <div className={`mt-10 flex justify-start gap-3 ${type === 'web' ? 'max-w-[660px]' : ''}`}>
             <button
               type="button"
-              className="glass rounded-full px-5 py-2 text-sm font-medium transition hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/10 dark:disabled:hover:bg-transparent"
+              className="rounded-full border border-slate-300/80 bg-white px-6 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-200 dark:hover:bg-white/[0.1] dark:disabled:hover:bg-white/[0.06]"
               disabled={page <= 1}
               onClick={() =>
                 router.push(
@@ -834,11 +858,11 @@ export default function SearchPageContent() {
                 )
               }
             >
-              Previous
+              ← Previous
             </button>
             <button
               type="button"
-              className="glass rounded-full px-5 py-2 text-sm font-medium transition hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-white/10 dark:disabled:hover:bg-transparent"
+              className="rounded-full border border-slate-300/80 bg-white px-6 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-200 dark:hover:bg-white/[0.1] dark:disabled:hover:bg-white/[0.06]"
               disabled={page * (data.perPage ?? 10) >= data.totalResults}
               onClick={() =>
                 router.push(
@@ -846,7 +870,7 @@ export default function SearchPageContent() {
                 )
               }
             >
-              Next
+              Next →
             </button>
           </div>
         )}
@@ -863,7 +887,8 @@ export default function SearchPageContent() {
           role="presentation"
         >
           <div
-            className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-slate-950/85 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85)]"
+            ref={videoStageRef}
+            className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-slate-950/85 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85)] outline-none [&:fullscreen]:max-w-none [&:fullscreen]:h-full [&:fullscreen]:rounded-none"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal
@@ -871,28 +896,49 @@ export default function SearchPageContent() {
           >
             <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <span className="truncate text-sm font-medium text-slate-200">Video</span>
-              <button
-                type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
-                aria-label="Close"
-                onClick={() => setVideoModal(null)}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                  aria-label={videoStageFs ? 'Exit full screen' : 'Full screen'}
+                  onClick={() => void toggleVideoStageFullscreen()}
+                >
+                  {videoStageFs ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Close"
+                  onClick={() => setVideoModal(null)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <div className="aspect-video w-full bg-black">
-              {videoEmbedSrc ? (
+              {videoModal && isDirectVideoAssetUrl(videoModal) ? (
+                // Direct MP4/WebM — use native <video> so no iframe CORS issues
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  key={videoModal}
+                  src={videoModal}
+                  className="h-full w-full"
+                  controls
+                  autoPlay
+                  playsInline
+                />
+              ) : videoEmbedSrc ? (
                 <iframe
                   src={videoEmbedSrc}
                   className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; web-share"
                   allowFullScreen
                   title="Video player"
                 />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
                   <p className="max-w-sm text-sm text-slate-400">
-                    This video can’t be embedded in the page. Open it in a new tab to watch.
+                    This video can&apos;t be embedded. Open it in a new tab to watch.
                   </p>
                   <a
                     href={videoModal}

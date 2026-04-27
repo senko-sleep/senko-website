@@ -17,6 +17,7 @@ import {
   metaWebSearch,
   metaImageSearch,
   metaVideoSearch,
+  metaGifSearch,
   metaNewsSearch,
   hybridMetaWebSearch,
   ddgAcSuggest,
@@ -299,7 +300,21 @@ export async function searchHandler(req: Request, res: Response, next: NextFunct
             )
           : await videoRanker.search({ ...pq, type: 'video' }, parsed.page, parsed.perPage, { safe });
     } else {
-      body = await gifRanker.search({ ...pq, type: 'gif' }, parsed.page, parsed.perPage, { safe });
+      // Try meta scrape first; fall back to local DB; if both fail return empty rather than 500.
+      const emptyGif: SearchResponse = {
+        query: parsed.q, type: 'gif', page: parsed.page,
+        perPage: parsed.perPage, totalResults: 0, results: [],
+      };
+      if (useMetaSearch()) {
+        const meta = await metaGifSearch(parsed.q, parsed.page, parsed.perPage, safe).catch(() => emptyGif);
+        if (meta.results.length > 0) {
+          body = meta;
+        } else {
+          body = await gifRanker.search({ ...pq, type: 'gif' }, parsed.page, parsed.perPage, { safe }).catch(() => emptyGif);
+        }
+      } else {
+        body = await gifRanker.search({ ...pq, type: 'gif' }, parsed.page, parsed.perPage, { safe }).catch(() => emptyGif);
+      }
     }
 
     try {

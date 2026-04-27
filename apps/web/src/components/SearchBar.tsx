@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from 'react';
-import { Search, Clock, Sparkles, Loader2, ArrowUpRight } from 'lucide-react';
+import { Search, Clock, Loader2, ArrowUpRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios, { isAxiosError } from 'axios';
 import { apiUrl } from '@/lib/api';
@@ -271,53 +271,43 @@ export default function SearchBar({
           <motion.ul
             id={listId}
             role="listbox"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18 }}
-            className={`absolute left-0 right-0 top-full z-40 mt-2 overflow-auto rounded-[24px] border backdrop-blur-2xl ${
+            initial={{ opacity: 0, y: -4, scaleY: 0.97 }}
+            animate={{ opacity: 1, y: 0, scaleY: 1 }}
+            exit={{ opacity: 0, y: -4, scaleY: 0.97 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
+            style={{ transformOrigin: 'top' }}
+            className={`absolute left-0 right-0 top-full z-40 overflow-hidden border backdrop-blur-2xl ${
               isHero
-                ? 'max-h-[20rem] border-black/[0.06] bg-white/88 p-2 shadow-[0_28px_60px_-32px_rgba(15,23,42,0.5)] dark:border-white/[0.08] dark:bg-[#17181b]/92 dark:shadow-[0_32px_70px_-36px_rgba(0,0,0,0.9)]'
-                : 'max-h-[22rem] border-white/60 bg-white/85 p-1.5 shadow-glass dark:border-white/[0.08] dark:bg-slate-900/90 dark:shadow-glass-dark'
+                ? 'rounded-[20px] mt-2 border-black/[0.07] bg-white/95 shadow-[0_20px_60px_-16px_rgba(15,23,42,0.35)] dark:border-white/[0.09] dark:bg-[#1c1e22]/96 dark:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.85)]'
+                : 'rounded-2xl mt-1.5 border-slate-200/80 bg-white/97 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.22)] dark:border-white/[0.08] dark:bg-[#18191d]/97 dark:shadow-[0_16px_48px_-16px_rgba(0,0,0,0.75)]'
             }`}
           >
-            {liveRows.length > 0 && (
-              <li className="flex items-center gap-1.5 px-3 pb-1.5 pt-1">
-                <Sparkles className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" aria-hidden />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
-                  Suggestions
-                </span>
-                {suggestLoading && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />}
-              </li>
-            )}
-            {recentRows.length > 0 && (
-              <li className="flex items-center gap-1.5 px-3 pb-1.5 pt-1">
-                <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" aria-hidden />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
-                  Recent
-                </span>
-              </li>
+            {/* Header row with loading indicator */}
+            {suggestLoading && liveRows.length === 0 && (
+              <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-white/[0.05]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" aria-hidden />
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">Finding suggestions…</span>
+              </div>
             )}
 
             {combined.map((c, idx) => {
               const i = idx;
               const isHistory = c.kind === 'history';
+              const isActive = i === activeIdx;
               return (
                 <li
                   key={`${c.kind}-${c.text}-${idx}`}
                   id={`opt-${i}`}
                   role="option"
-                  aria-selected={i === activeIdx}
+                  aria-selected={isActive}
                   onMouseEnter={() => setActiveIdx(i)}
                 >
                   <button
                     type="button"
-                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
-                      i === activeIdx
-                        ? isHistory
-                          ? 'bg-slate-100/80 dark:bg-white/[0.06]'
-                          : 'bg-sky-500/[0.08] dark:bg-sky-400/[0.08]'
-                        : 'hover:bg-slate-100/70 dark:hover:bg-white/[0.04]'
+                    className={`group/row flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                      isActive
+                        ? 'bg-slate-100/90 dark:bg-white/[0.07]'
+                        : 'hover:bg-slate-50 dark:hover:bg-white/[0.04]'
                     }`}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
@@ -326,40 +316,35 @@ export default function SearchBar({
                       setOpen(false);
                     }}
                   >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                      isHistory
-                        ? 'bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400'
-                        : 'bg-sky-100/80 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
-                    }`}>
-                      {isHistory ? <Clock className="h-4 w-4" aria-hidden /> : <ArrowUpRight className="h-4 w-4" aria-hidden />}
-                    </span>
-                    <span className="min-w-0 flex-1 pr-2">
+                    {isHistory ? (
+                      <Clock className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />
+                    ) : (
+                      <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1 text-[14px] leading-snug">
                       <SuggestionLabel query={q} text={c.text} />
                     </span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                      isHistory
-                        ? 'bg-slate-200/70 text-slate-500 dark:bg-white/[0.07] dark:text-slate-400'
-                        : 'bg-sky-100/90 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
-                    }`}>
-                      {isHistory ? 'Recent' : 'Live'}
-                    </span>
+                    <ArrowUpRight
+                      className={`h-4 w-4 shrink-0 text-slate-400 opacity-0 transition-opacity group-hover/row:opacity-100 dark:text-slate-500 ${isActive ? 'opacity-100' : ''}`}
+                      aria-hidden
+                    />
                   </button>
                 </li>
               );
             })}
 
             {normalizedQuery.length >= 1 && suggestLoading && liveRows.length === 0 && recentRows.length === 0 && (
-              <li className="space-y-2 px-2 py-3">
-                {[0, 1, 2].map((k) => (
-                  <div
-                    key={k}
-                    className="flex items-center gap-3 rounded-2xl px-2.5 py-2"
-                  >
-                    <span className="h-8 w-8 animate-pulse rounded-full bg-slate-200/80 dark:bg-white/10" />
-                    <span className="h-4 flex-1 animate-pulse rounded-md bg-slate-200/70 dark:bg-white/10" />
+              <>
+                {[70, 55, 80].map((w, k) => (
+                  <div key={k} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="h-4 w-4 shrink-0 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                    <span
+                      className="h-3.5 animate-pulse rounded bg-slate-200 dark:bg-white/10"
+                      style={{ width: `${w}%` }}
+                    />
                   </div>
                 ))}
-              </li>
+              </>
             )}
           </motion.ul>
         )}

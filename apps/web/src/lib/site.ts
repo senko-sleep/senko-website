@@ -27,10 +27,10 @@ export function siteTitleFromHostname(host: string): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
-/** Google-hosted favicon service (works for any public domain). */
+/** DuckDuckGo favicon service — returns a transparent placeholder instead of 404 for unknown domains. */
 export function faviconUrlForHost(hostname: string): string {
   const h = hostname.replace(/^www\./, '');
-  return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(h)}`;
+  return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(h)}.ico`;
 }
 
 export function faviconUrlForPageUrl(pageUrl: string): string {
